@@ -1,0 +1,4 @@
+-keep class com.stormv.vpn.model.** { *; }
+-keep class com.tencent.mmkv.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*

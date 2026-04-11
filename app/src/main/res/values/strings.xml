@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StormV</string>
+    <string name="add_server">Добавить сервер</string>
+    <string name="paste_from_clipboard">Вставить из буфера</string>
+    <string name="connect">Подключить</string>
+    <string name="disconnect">Отключить</string>
+    <string name="status_connected">Подключено</string>
+    <string name="status_connecting">Подключение…</string>
+    <string name="status_disconnected">Отключено</string>
+    <string name="status_error">Ошибка</string>
+    <string name="no_servers">Нет серверов</string>
+    <string name="no_servers_hint">Нажмите + чтобы добавить</string>
+    <string name="error_invalid_url">Не удалось распознать ссылку.\nПроверьте формат и протокол.</string>
+    <string name="error_empty_url">Введите ссылку</string>
+    <string name="server_not_selected">Не выбран</string>
+    <string name="supported_protocols">VLESS · VMess · SS · Trojan · Hysteria2 · TUIC · WireGuard</string>
+    <string name="notif_connected">Подключено</string>
+    <string name="notif_connecting">Подключение…</string>
+    <string name="notif_disconnect_action">Отключить</string>
+</resources>
