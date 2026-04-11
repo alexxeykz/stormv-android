@@ -18,16 +18,24 @@ jobs:
 
       - name: Download sing-box for Android (arm64)
         run: |
-          # Фиксируем 1.9.x — последняя версия с поддержкой поля fd в TUN inbound
-          # Используем per_page=100 чтобы найти 1.9.x среди новых релизов
-          LATEST=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100" \
-            | grep '"tag_name"' | grep 'v1\.9\.' | grep -v 'alpha\|beta\|rc' | head -1 \
-            | sed 's/.*"v\([^"]*\)".*/\1/')
-          echo "sing-box version: $LATEST"
+          # fd в TUN inbound поддерживался до введения strict JSON (~v1.8.0)
+          # Ищем последний стабильный релиз из v1.7.x, затем v1.6.x
+          RELEASES=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100")
+          LATEST=""
+          for MINOR in 7 6 5; do
+            LATEST=$(echo "$RELEASES" | grep '"tag_name"' \
+              | grep "\"v1\\.${MINOR}\\." | grep -v 'alpha\|beta\|rc' | head -1 \
+              | sed 's/.*"v\([^"]*\)".*/\1/')
+            if [ -n "$LATEST" ]; then
+              echo "Found v1.${MINOR}.x: $LATEST"
+              break
+            fi
+          done
           if [ -z "$LATEST" ]; then
-            echo "Fallback to hardcoded version 1.9.7"
-            LATEST="1.9.7"
+            echo "Fallback to hardcoded version 1.7.0"
+            LATEST="1.7.0"
           fi
+          echo "sing-box version: $LATEST"
           curl -L "https://github.com/SagerNet/sing-box/releases/download/v${LATEST}/sing-box-${LATEST}-android-arm64.tar.gz" -o sing-box.tar.gz
           tar -xzf sing-box.tar.gz
           mkdir -p app/src/main/jniLibs/arm64-v8a
