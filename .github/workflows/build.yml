@@ -19,10 +19,15 @@ jobs:
       - name: Download sing-box for Android (arm64)
         run: |
           # Фиксируем 1.9.x — последняя версия с поддержкой поля fd в TUN inbound
-          LATEST=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases" \
-            | grep '"tag_name"' | grep '"v1\.9\.' | head -1 \
-            | cut -d'"' -f4 | sed 's/v//')
+          # Используем per_page=100 чтобы найти 1.9.x среди новых релизов
+          LATEST=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100" \
+            | grep '"tag_name"' | grep 'v1\.9\.' | grep -v 'alpha\|beta\|rc' | head -1 \
+            | sed 's/.*"v\([^"]*\)".*/\1/')
           echo "sing-box version: $LATEST"
+          if [ -z "$LATEST" ]; then
+            echo "Fallback to hardcoded version 1.9.7"
+            LATEST="1.9.7"
+          fi
           curl -L "https://github.com/SagerNet/sing-box/releases/download/v${LATEST}/sing-box-${LATEST}-android-arm64.tar.gz" -o sing-box.tar.gz
           tar -xzf sing-box.tar.gz
           mkdir -p app/src/main/jniLibs/arm64-v8a
