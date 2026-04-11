@@ -12,14 +12,14 @@ object ConfigBuilder {
 
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
-    fun build(server: ServerConfig): String {
+    fun build(server: ServerConfig, tunFd: Int): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "inbounds" to listOf(
                 mapOf(
                     "type" to "tun",
                     "tag" to "tun-in",
-                    // fd передаётся через --tun-fd в командной строке (sing-box 1.10+)
+                    "fd" to tunFd,
                     "mtu" to 9000,
                     "auto_route" to false,   // маршруты управляются Android VpnService
                     "stack" to "system"
