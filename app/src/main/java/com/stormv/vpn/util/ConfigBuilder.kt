@@ -33,8 +33,8 @@ object ConfigBuilder {
             ),
             "dns" to mapOf(
                 "servers" to listOf(
-                    mapOf("tag" to "remote", "address" to "8.8.8.8", "detour" to "proxy"),
-                    mapOf("tag" to "local", "address" to "local", "detour" to "direct")
+                    mapOf("type" to "udp", "tag" to "remote", "server" to "8.8.8.8", "detour" to "proxy"),
+                    mapOf("type" to "local", "tag" to "local", "detour" to "direct")
                 ),
                 "rules" to listOf(
                     mapOf("outbound" to "any", "server" to "local")
