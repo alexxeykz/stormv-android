@@ -95,7 +95,7 @@ class StormVpnService : VpnService() {
                 // Записываем конфиг sing-box
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
-                configFile.writeText(ConfigBuilder.build(server, tun.fd))
+                configFile.writeText(ConfigBuilder.build(server))
                 AppLogger.d("VpnService", "Конфиг записан: ${configFile.absolutePath}")
 
                 // Запускаем sing-box
@@ -103,7 +103,11 @@ class StormVpnService : VpnService() {
                 if (!singBoxFile.exists()) throw Exception("sing-box не найден. Переустановите приложение.")
 
                 AppLogger.i("VpnService", "Запуск sing-box: ${singBoxFile.absolutePath}")
-                singBoxProcess = ProcessBuilder(singBoxFile.absolutePath, "run", "-c", configFile.absolutePath)
+                // --tun-fd передаём fd TUN-интерфейса через аргумент командной строки (sing-box 1.10+)
+                singBoxProcess = ProcessBuilder(
+                    singBoxFile.absolutePath, "run", "-c", configFile.absolutePath,
+                    "--tun-fd", tun.fd.toString()
+                )
                     .redirectErrorStream(true)
                     .directory(configDir)
                     .start()
