@@ -19,18 +19,10 @@ object ConfigBuilder {
                 mapOf(
                     "type" to "tun",
                     "tag" to "tun-in",
-                    "inet4_address" to "172.19.0.1/30",
-                    "inet6_address" to "fdfe:dcba:9876::1/126",
+                    "fd" to tunFd,           // fd вместо tun_fd (новые версии sing-box)
                     "mtu" to 9000,
-                    "auto_route" to true,
-                    "strict_route" to true,
-                    "stack" to "system",
-                    "platform" to mapOf(
-                        "http_proxy" to mapOf(
-                            "enabled" to false
-                        )
-                    ),
-                    "tun_fd" to tunFd
+                    "auto_route" to false,   // маршруты управляются Android VpnService
+                    "stack" to "system"
                 )
             ),
             "outbounds" to listOf(
@@ -52,10 +44,16 @@ object ConfigBuilder {
             "route" to mapOf(
                 "rules" to listOf(
                     mapOf("protocol" to "dns", "outbound" to "dns-out"),
-                    mapOf("geoip" to listOf("private"), "outbound" to "direct")
+                    // ip_cidr вместо geoip — не требует базы данных
+                    mapOf(
+                        "ip_cidr" to listOf(
+                            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                            "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
+                        ),
+                        "outbound" to "direct"
+                    )
                 ),
-                "final" to "proxy",
-                "auto_detect_interface" to true
+                "final" to "proxy"
             )
         )
         return gson.toJson(config)
