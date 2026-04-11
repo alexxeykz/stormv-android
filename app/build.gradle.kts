@@ -58,6 +58,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // Не сжимать .so — иначе Android не даст запустить как процесс
+            useLegacyPackaging = true
+        }
     }
 }
 
