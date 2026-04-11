@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -20,11 +19,11 @@ import com.stormv.vpn.ui.theme.*
 @Composable
 fun AddServerSheet(
     onAdd: (String) -> Boolean,
+    onAddSubscription: (String, (Int, String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var url by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf("") }
-    val clipboard = LocalClipboardManager.current
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Ссылка", "Подписка")
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -37,7 +36,6 @@ fun AddServerSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Заголовок
             Text(
                 text = "Добавить сервер",
                 fontSize = 20.sp,
@@ -45,121 +43,222 @@ fun AddServerSheet(
                 color = SVTextPrimary
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                text = "VLESS · VMess · SS · Trojan · Hysteria2 · TUIC · WireGuard",
-                fontSize = 12.sp,
-                color = SVPurple
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // Поле ввода URL
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it; error = "" },
-                placeholder = {
-                    Text(
-                        "vless://, ss://, trojan://...",
-                        color = SVTextSecondary.copy(alpha = 0.5f)
-                    )
-                },
-                label = { Text("Ссылка на сервер") },
-                singleLine = false,
-                maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = SVPurple,
-                    unfocusedBorderColor = SVTextSecondary.copy(alpha = 0.3f),
-                    focusedLabelColor = SVPurple,
-                    cursorColor = SVPurple,
-                    focusedTextColor = SVTextPrimary,
-                    unfocusedTextColor = SVTextPrimary,
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Кнопки действий
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Вставить из буфера
-                OutlinedButton(
-                    onClick = {
-                        val text = clipboard.getText()?.text?.trim() ?: ""
-                        if (text.isNotEmpty()) {
-                            url = text
-                            error = ""
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SVPurple),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, SVPurple),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Из буфера", fontSize = 13.sp)
-                }
-
-                // Очистить
-                IconButton(
-                    onClick = { url = ""; error = "" },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .align(Alignment.CenterVertically)
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = "Очистить",
-                        tint = SVTextSecondary
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = SVBgDeep,
+                contentColor = SVPurple,
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(title, fontSize = 14.sp) }
                     )
                 }
             }
 
-            // Ошибка
-            if (error.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = error,
-                    fontSize = 12.sp,
-                    color = SVError,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when (selectedTab) {
+                0 -> ServerUrlTab(onAdd = onAdd, onDismiss = onDismiss)
+                1 -> SubscriptionTab(onAddSubscription = onAddSubscription, onDismiss = onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerUrlTab(
+    onAdd: (String) -> Boolean,
+    onDismiss: () -> Unit,
+) {
+    var url by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    val clipboard = LocalClipboardManager.current
+
+    Text(
+        text = "VLESS · VMess · SS · Trojan · Hysteria2 · TUIC · WireGuard",
+        fontSize = 12.sp,
+        color = SVPurple
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    OutlinedTextField(
+        value = url,
+        onValueChange = { url = it; error = "" },
+        placeholder = { Text("vless://, ss://, trojan://...", color = SVTextSecondary.copy(alpha = 0.5f)) },
+        label = { Text("Ссылка на сервер") },
+        singleLine = false,
+        maxLines = 4,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = SVPurple,
+            unfocusedBorderColor = SVTextSecondary.copy(alpha = 0.3f),
+            focusedLabelColor = SVPurple,
+            cursorColor = SVPurple,
+            focusedTextColor = SVTextPrimary,
+            unfocusedTextColor = SVTextPrimary,
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedButton(
+            onClick = {
+                val text = clipboard.getText()?.text?.trim() ?: ""
+                if (text.isNotEmpty()) { url = text; error = "" }
+            },
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SVPurple),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SVPurple),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Из буфера", fontSize = 13.sp)
+        }
+        IconButton(
+            onClick = { url = ""; error = "" },
+            modifier = Modifier.size(40.dp).align(Alignment.CenterVertically)
+        ) {
+            Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = SVTextSecondary)
+        }
+    }
+
+    if (error.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(text = error, fontSize = 12.sp, color = SVError, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp))
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(
+            onClick = onDismiss,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SVTextSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SVTextSecondary.copy(alpha = 0.3f)),
+            modifier = Modifier.weight(1f).height(48.dp)
+        ) { Text("Отмена") }
+
+        Button(
+            onClick = {
+                if (url.isBlank()) { error = "Введите ссылку"; return@Button }
+                val ok = onAdd(url.trim())
+                if (ok) onDismiss()
+                else error = "Не удалось распознать ссылку.\nПроверьте формат и протокол."
+            },
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = SVPurple),
+            modifier = Modifier.weight(1f).height(48.dp)
+        ) { Text("Добавить", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun SubscriptionTab(
+    onAddSubscription: (String, (Int, String?) -> Unit) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var url by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+
+    Text(
+        text = "Вставьте ссылку на подписку — все серверы добавятся автоматически",
+        fontSize = 12.sp,
+        color = SVTextSecondary
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    OutlinedTextField(
+        value = url,
+        onValueChange = { url = it; error = "" },
+        placeholder = { Text("http:// или https://...", color = SVTextSecondary.copy(alpha = 0.5f)) },
+        label = { Text("URL подписки") },
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = SVPurple,
+            unfocusedBorderColor = SVTextSecondary.copy(alpha = 0.3f),
+            focusedLabelColor = SVPurple,
+            cursorColor = SVPurple,
+            focusedTextColor = SVTextPrimary,
+            unfocusedTextColor = SVTextPrimary,
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedButton(
+            onClick = {
+                val text = clipboard.getText()?.text?.trim() ?: ""
+                if (text.isNotEmpty()) { url = text; error = "" }
+            },
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SVPurple),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SVPurple),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Из буфера", fontSize = 13.sp)
+        }
+        IconButton(
+            onClick = { url = ""; error = "" },
+            modifier = Modifier.size(40.dp).align(Alignment.CenterVertically)
+        ) {
+            Icon(Icons.Outlined.Close, contentDescription = "Очистить", tint = SVTextSecondary)
+        }
+    }
+
+    if (error.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(text = error, fontSize = 12.sp, color = SVError, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp))
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(
+            onClick = onDismiss,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SVTextSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, SVTextSecondary.copy(alpha = 0.3f)),
+            modifier = Modifier.weight(1f).height(48.dp)
+        ) { Text("Отмена") }
+
+        Button(
+            onClick = {
+                if (url.isBlank()) { error = "Введите URL подписки"; return@Button }
+                loading = true
+                error = ""
+                onAddSubscription(url.trim()) { count, err ->
+                    loading = false
+                    if (err != null) error = err
+                    else onDismiss()
+                }
+            },
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = SVPurple),
+            enabled = !loading,
+            modifier = Modifier.weight(1f).height(48.dp)
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = SVTextPrimary,
+                    strokeWidth = 2.dp
                 )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Кнопки Отмена / Добавить
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SVTextSecondary),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, SVTextSecondary.copy(alpha = 0.3f)),
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) {
-                    Text("Отмена")
-                }
-
-                Button(
-                    onClick = {
-                        if (url.isBlank()) {
-                            error = "Введите ссылку"
-                            return@Button
-                        }
-                        val ok = onAdd(url.trim())
-                        if (ok) onDismiss()
-                        else error = "Не удалось распознать ссылку.\nПроверьте формат и протокол."
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SVPurple),
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) {
-                    Text("Добавить", fontWeight = FontWeight.Bold)
-                }
+            } else {
+                Text("Загрузить", fontWeight = FontWeight.Bold)
             }
         }
     }

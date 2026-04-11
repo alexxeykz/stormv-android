@@ -12,6 +12,7 @@ import com.stormv.vpn.model.ServerConfig
 import com.stormv.vpn.service.StormVpnService
 import com.stormv.vpn.util.AppLogger
 import com.stormv.vpn.util.PingUtil
+import com.stormv.vpn.util.SubscriptionManager
 import com.stormv.vpn.util.UrlParser
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -96,6 +97,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addServerFromClipboard(clipText: String): Boolean = addServerFromUrl(clipText)
+
+    fun addSubscription(url: String, onResult: (Int, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = SubscriptionManager.fetch(url)
+            result.onSuccess { servers ->
+                servers.forEach { ServerRepository.add(it) }
+                val updated = ServerRepository.loadAll()
+                _state.value = _state.value.copy(
+                    servers = updated,
+                    selectedServer = _state.value.selectedServer ?: servers.firstOrNull()
+                )
+                AppLogger.i("UI", "Подписка: добавлено ${servers.size} серверов")
+                onResult(servers.size, null)
+            }.onFailure { e ->
+                AppLogger.e("UI", "Ошибка подписки: ${e.message}")
+                onResult(0, e.message)
+            }
+        }
+    }
 
     fun removeServer(server: ServerConfig) {
         if (_state.value.status == VpnStatus.CONNECTED &&

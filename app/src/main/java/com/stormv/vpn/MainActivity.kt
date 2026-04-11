@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 if (showAddSheet) {
                     AddServerSheet(
                         onAdd = { url -> vm.addServerFromUrl(url) },
+                        onAddSubscription = { url, cb -> vm.addSubscription(url, cb) },
                         onDismiss = { showAddSheet = false }
                     )
                 }
