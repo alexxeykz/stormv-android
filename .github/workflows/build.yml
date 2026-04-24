@@ -43,7 +43,6 @@ jobs:
           }
 
           download_singbox arm64-v8a   android-arm64
-          download_singbox armeabi-v7a android-arm
           download_singbox x86_64      android-amd64
 
       - name: Download tun2socks (arm64-v8a, armeabi-v7a, x86_64)
@@ -67,7 +66,6 @@ jobs:
           }
 
           download_tun2socks arm64-v8a   android-arm64
-          download_tun2socks armeabi-v7a android-arm
           download_tun2socks x86_64      android-amd64
 
       - name: Decode keystore
