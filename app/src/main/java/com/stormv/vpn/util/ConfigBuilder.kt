@@ -137,10 +137,11 @@ object ConfigBuilder {
     private fun buildTls(s: ServerConfig): Map<String, Any?>? {
         if (s.security == "none" || s.security.isEmpty()) return null
         return if (s.security == "reality") {
+            val fp = s.fingerprint.ifEmpty { "chrome" }
             mapOf(
                 "enabled" to true,
                 "server_name" to s.sni,
-                "utls" to mapOf("enabled" to true, "fingerprint" to s.fingerprint),
+                "utls" to mapOf("enabled" to true, "fingerprint" to fp),
                 "reality" to mapOf(
                     "enabled" to true,
                     "public_key" to s.realityPublicKey,
