@@ -35,7 +35,6 @@ object ConfigBuilder {
             ),
             "route" to mapOf(
                 "rules" to listOf(
-                    mapOf("action" to "sniff"),
                     // Локальные адреса — напрямую
                     mapOf(
                         "ip_cidr" to listOf(

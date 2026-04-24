@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Binder
 import android.os.IBinder
+import android.os.ParcelFileDescriptor
 import com.stormv.vpn.MainActivity
 import com.stormv.vpn.R
 import com.stormv.vpn.model.ServerConfig
@@ -42,6 +43,7 @@ class StormVpnService : VpnService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var vpnJob: Job? = null
     private var singBoxProcess: Process? = null
+    private var tunPfd: ParcelFileDescriptor? = null
 
     inner class LocalBinder : Binder() {
         fun getService() = this@StormVpnService
@@ -85,14 +87,14 @@ class StormVpnService : VpnService() {
                     .setBlocking(false)
                     .addDisallowedApplication(packageName) // наш процесс (sing-box) идёт в обход VPN
 
-                val tun = builder.establish()
+                tunPfd = builder.establish()
                     ?: throw Exception("Не удалось создать TUN интерфейс")
-                val tunFd = tun.fd
+                val tunFd = tunPfd!!.fd
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
                 // Снимаем FD_CLOEXEC чтобы fd был виден дочернему процессу sing-box
                 try {
-                    android.system.Os.fcntl(tunFd, android.system.OsConstants.F_SETFD, 0)
+                    android.system.Os.fcntl(tunPfd!!.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
                 } catch (e: Exception) {
                     AppLogger.w("VpnService", "fcntl: ${e.message}")
                 }
@@ -159,6 +161,8 @@ class StormVpnService : VpnService() {
         vpnJob?.cancel()
         singBoxProcess?.destroyForcibly()
         singBoxProcess = null
+        tunPfd?.close()
+        tunPfd = null
         isRunning = false
         lastError = null
         onStatusChanged?.invoke(false, null)

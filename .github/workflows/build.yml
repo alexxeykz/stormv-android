@@ -17,17 +17,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Download sing-box (arm64-v8a, armeabi-v7a, x86_64)
+      - name: Download sing-box (arm64-v8a, x86_64)
         run: |
-          RELEASES=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100")
-          VERSION=""
-          for MINOR in 7 6 5; do
-            VERSION=$(echo "$RELEASES" | grep '"tag_name"' \
-              | grep "\"v1\\.${MINOR}\\." | grep -v 'alpha\|beta\|rc' | head -1 \
-              | sed 's/.*"v\([^"]*\)".*/\1/')
-            [ -n "$VERSION" ] && { echo "sing-box version: $VERSION"; break; }
-          done
-          [ -z "$VERSION" ] && VERSION="1.7.0"
+          VERSION="1.7.0"
+          echo "sing-box version: $VERSION"
           BASE="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}"
 
           download_singbox() {
