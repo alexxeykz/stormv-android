@@ -90,7 +90,13 @@ class StormVpnService : VpnService() {
                 val tunFd = tun.fd
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
-                // ── 2. Запускаем sing-box как SOCKS5 прокси ───────────────────
+                // Снимаем FD_CLOEXEC чтобы fd был виден дочернему процессу sing-box
+                try {
+                    android.system.Os.fcntl(tunFd, android.system.OsConstants.F_SETFD, 0)
+                } catch (e: Exception) {
+                    AppLogger.w("VpnService", "fcntl: ${e.message}")
+                }
+
                 // ── 2. Запускаем sing-box в TUN режиме (fd → VPN сервер) ─────
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
@@ -105,6 +111,14 @@ class StormVpnService : VpnService() {
                     .directory(configDir)
                     .start()
 
+                // Ждём 2 сек и проверяем — если упал, читаем вывод синхронно
+                Thread.sleep(2000)
+                if (singBoxProcess?.isAlive == false) {
+                    val output = singBoxProcess?.inputStream?.bufferedReader()?.readText()?.trim() ?: ""
+                    throw Exception("sing-box упал:\n$output")
+                }
+
+                // Процесс жив — читаем логи в фоне
                 scope.launch {
                     singBoxProcess?.inputStream?.bufferedReader()?.forEachLine { line ->
                         val level = when {
@@ -117,10 +131,6 @@ class StormVpnService : VpnService() {
                     }
                 }
 
-                Thread.sleep(1500)
-                if (singBoxProcess?.isAlive == false) {
-                    throw Exception("sing-box завершился сразу после запуска")
-                }
                 AppLogger.i("VpnService", "sing-box запущен")
 
                 isRunning = true
