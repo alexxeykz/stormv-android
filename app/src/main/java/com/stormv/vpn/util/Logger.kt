@@ -18,7 +18,10 @@ enum class LogLevel(val label: String, val priority: Int) {
     ERROR("ERR", 3);
 }
 
+private val logEntryCounter = java.util.concurrent.atomic.AtomicLong(0)
+
 data class LogEntry(
+    val id: Long = logEntryCounter.getAndIncrement(),
     val time: Date = Date(),
     val level: LogLevel,
     val tag: String,

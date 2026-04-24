@@ -201,7 +201,7 @@ fun LogScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
-                items(filtered, key = { it.hashCode() }) { entry ->
+                items(filtered, key = { it.id }) { entry ->
                     LogEntryRow(entry)
                 }
             }
