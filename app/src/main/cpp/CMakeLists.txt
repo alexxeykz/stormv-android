@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("stormv")
+add_library(stormv-native SHARED native_utils.cpp)
+find_library(log-lib log)
+target_link_libraries(stormv-native ${log-lib})

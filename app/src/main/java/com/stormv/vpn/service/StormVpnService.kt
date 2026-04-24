@@ -15,12 +15,14 @@ import com.stormv.vpn.model.ServerConfig
 import com.stormv.vpn.util.AppLogger
 import com.stormv.vpn.util.ConfigBuilder
 import com.stormv.vpn.util.LogLevel
+import com.stormv.vpn.util.NativeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class StormVpnService : VpnService() {
 
@@ -92,8 +94,9 @@ class StormVpnService : VpnService() {
                 val tunFd = tunPfd!!.fd
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
-                // Снимаем FD_CLOEXEC — нужно для tun2socks
-                clearFdCloexec(tunPfd!!)
+                // Снимаем FD_CLOEXEC через JNI — нужно для tun2socks
+                val fcntlResult = NativeUtils.clearFdCloexec(tunFd)
+                AppLogger.i("VpnService", "clearFdCloexec(fd=$tunFd) = $fcntlResult")
 
                 // ── 2. Запускаем sing-box как SOCKS5/HTTP прокси на 127.0.0.1:2080 ──
                 val singBoxFile = File(applicationInfo.nativeLibraryDir, "libsingbox.so")
@@ -182,8 +185,10 @@ class StormVpnService : VpnService() {
         AppLogger.i("VpnService", "Остановка VPN...")
         vpnJob?.cancel()
         tun2socksProcess?.destroyForcibly()
+        tun2socksProcess?.waitFor(3, TimeUnit.SECONDS)
         tun2socksProcess = null
         singBoxProcess?.destroyForcibly()
+        singBoxProcess?.waitFor(3, TimeUnit.SECONDS)
         singBoxProcess = null
         tunPfd?.close()
         tunPfd = null
@@ -198,26 +203,6 @@ class StormVpnService : VpnService() {
     override fun onDestroy() {
         stopVpn()
         super.onDestroy()
-    }
-
-    private fun clearFdCloexec(pfd: ParcelFileDescriptor) {
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 34) {
-                @Suppress("NewApi")
-                android.system.Os.fcntlInt(pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
-                AppLogger.d("VpnService", "FD_CLOEXEC cleared (API 34+)")
-            } else {
-                val libcore = Class.forName("libcore.io.Libcore")
-                val os = libcore.getDeclaredField("os").apply { isAccessible = true }.get(null)
-                val method = os!!.javaClass.methods.firstOrNull { m ->
-                    m.name == "fcntl" && m.parameterCount == 3
-                }
-                method?.invoke(os, pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
-                AppLogger.d("VpnService", "FD_CLOEXEC cleared (reflection)")
-            }
-        } catch (e: Exception) {
-            AppLogger.w("VpnService", "clearFdCloexec: ${e.message}")
-        }
     }
 
     // ── Notifications ──────────────────────────────────────────────────────────
