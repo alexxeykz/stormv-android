@@ -42,7 +42,6 @@ class StormVpnService : VpnService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var vpnJob: Job? = null
     private var singBoxProcess: Process? = null
-    private var tun2socksProcess: Process? = null
 
     inner class LocalBinder : Binder() {
         fun getService() = this@StormVpnService
@@ -92,20 +91,20 @@ class StormVpnService : VpnService() {
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
                 // ── 2. Запускаем sing-box как SOCKS5 прокси ───────────────────
+                // ── 2. Запускаем sing-box в TUN режиме (fd → VPN сервер) ─────
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
-                configFile.writeText(ConfigBuilder.build(server))
+                configFile.writeText(ConfigBuilder.build(server, tunFd))
 
                 val singBoxFile = File(applicationInfo.nativeLibraryDir, "libsingbox.so")
                 if (!singBoxFile.exists()) throw Exception("sing-box не найден. Переустановите приложение.")
 
-                AppLogger.i("VpnService", "Запуск sing-box: ${singBoxFile.absolutePath}")
+                AppLogger.i("VpnService", "Запуск sing-box TUN: fd=$tunFd → ${server.host}:${server.port}")
                 singBoxProcess = ProcessBuilder(singBoxFile.absolutePath, "run", "-c", configFile.absolutePath)
                     .redirectErrorStream(true)
                     .directory(configDir)
                     .start()
 
-                // Читаем вывод sing-box в лог
                 scope.launch {
                     singBoxProcess?.inputStream?.bufferedReader()?.forEachLine { line ->
                         val level = when {
@@ -118,39 +117,11 @@ class StormVpnService : VpnService() {
                     }
                 }
 
-                // Ждём пока sing-box поднимет прокси
                 Thread.sleep(1500)
                 if (singBoxProcess?.isAlive == false) {
                     throw Exception("sing-box завершился сразу после запуска")
                 }
-                AppLogger.i("VpnService", "sing-box запущен на 127.0.0.1:${ConfigBuilder.PROXY_PORT}")
-
-                // ── 3. Запускаем tun2socks: TUN fd → SOCKS5 прокси ───────────
-                val tun2socksFile = File(applicationInfo.nativeLibraryDir, "libtun2socks.so")
-                if (!tun2socksFile.exists()) throw Exception("tun2socks не найден. Переустановите приложение.")
-
-                AppLogger.i("VpnService", "Запуск tun2socks: fd=$tunFd → socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}")
-                tun2socksProcess = ProcessBuilder(
-                    tun2socksFile.absolutePath,
-                    "-device", "fd://$tunFd",
-                    "-proxy", "socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}",
-                    "-loglevel", "warning"
-                )
-                    .redirectErrorStream(true)
-                    .directory(configDir)
-                    .start()
-
-                // Читаем вывод tun2socks в лог
-                scope.launch {
-                    tun2socksProcess?.inputStream?.bufferedReader()?.forEachLine { line ->
-                        AppLogger.write(LogLevel.INFO, "tun2socks", line)
-                    }
-                }
-
-                Thread.sleep(500)
-                if (tun2socksProcess?.isAlive == false) {
-                    throw Exception("tun2socks завершился сразу после запуска")
-                }
+                AppLogger.i("VpnService", "sing-box запущен")
 
                 isRunning = true
                 lastError = null
@@ -176,8 +147,6 @@ class StormVpnService : VpnService() {
     private fun stopVpn() {
         AppLogger.i("VpnService", "Остановка VPN...")
         vpnJob?.cancel()
-        tun2socksProcess?.destroyForcibly()
-        tun2socksProcess = null
         singBoxProcess?.destroyForcibly()
         singBoxProcess = null
         isRunning = false

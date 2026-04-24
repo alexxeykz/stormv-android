@@ -45,37 +45,6 @@ jobs:
           download_singbox arm64-v8a   android-arm64
           download_singbox x86_64      android-amd64
 
-      - name: Download tun2socks (arm64-v8a, x86_64)
-        run: |
-          RELEASE=$(curl -s "https://api.github.com/repos/xjasonlyu/tun2socks/releases/latest")
-          VERSION=$(echo "$RELEASE" | grep '"tag_name"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
-          echo "tun2socks version: $VERSION"
-          BASE="https://github.com/xjasonlyu/tun2socks/releases/download/v${VERSION}"
-
-          download_tun2socks() {
-            local ABI=$1 ARCH=$2
-            TMP=$(mktemp -d)
-            mkdir -p "app/src/main/jniLibs/${ABI}"
-
-            # Пробуем .zip, потом прямой бинарник
-            if curl -fL "${BASE}/tun2socks-${ARCH}.zip" -o "$TMP/t.zip" 2>/dev/null; then
-              unzip -q "$TMP/t.zip" -d "$TMP"
-              BINARY=$(find "$TMP" -type f ! -name "*.zip" ! -name "*.txt" ! -name "*.md" | head -1)
-            elif curl -fL "${BASE}/tun2socks-${ARCH}" -o "$TMP/tun2socks" 2>/dev/null; then
-              BINARY="$TMP/tun2socks"
-            else
-              echo "ERROR: не удалось скачать tun2socks для ${ARCH}"; exit 1
-            fi
-
-            cp "$BINARY" "app/src/main/jniLibs/${ABI}/libtun2socks.so"
-            chmod +x "app/src/main/jniLibs/${ABI}/libtun2socks.so"
-            rm -rf "$TMP"
-            echo "tun2socks ${ABI}: OK ($(du -h "app/src/main/jniLibs/${ABI}/libtun2socks.so" | cut -f1))"
-          }
-
-          download_tun2socks arm64-v8a   android-arm64
-          download_tun2socks x86_64      android-amd64
-
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > stormv.jks
 

@@ -6,24 +6,26 @@ import com.stormv.vpn.model.ServerConfig
 
 /**
  * Генерирует sing-box JSON конфиг для всех 7 протоколов.
- * Архитектура: sing-box как mixed (SOCKS5/HTTP) прокси на 127.0.0.1:2080.
- * TUN трафик пробрасывается через tun2socks → sing-box.
+ * Архитектура: sing-box в TUN режиме — принимает fd от Android VpnService напрямую.
+ * tun2socks не нужен.
  */
 object ConfigBuilder {
 
-    const val PROXY_PORT = 2080
-
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
-    fun build(server: ServerConfig): String {
+    fun build(server: ServerConfig, tunFd: Int): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "inbounds" to listOf(
                 mapOf(
-                    "type" to "mixed",
-                    "tag" to "mixed-in",
-                    "listen" to "127.0.0.1",
-                    "listen_port" to PROXY_PORT
+                    "type" to "tun",
+                    "tag" to "tun-in",
+                    "fd" to tunFd,
+                    "mtu" to 8500,
+                    "auto_route" to false,
+                    "stack" to "system",
+                    "sniff" to true,
+                    "sniff_override_destination" to false
                 )
             ),
             "outbounds" to listOf(
