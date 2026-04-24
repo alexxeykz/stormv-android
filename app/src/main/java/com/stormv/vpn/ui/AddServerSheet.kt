@@ -23,7 +23,9 @@ fun AddServerSheet(
     onDismiss: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var pastedUrl by remember { mutableStateOf("") }
     val tabs = listOf("Ссылка", "Подписка")
+    val clipboard = LocalClipboardManager.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -45,6 +47,28 @@ fun AddServerSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Умная кнопка — определяет тип по содержимому буфера
+            Button(
+                onClick = {
+                    val text = clipboard.getText()?.text?.trim() ?: return@Button
+                    if (text.startsWith("http://") || text.startsWith("https://")) {
+                        selectedTab = 1
+                    } else {
+                        selectedTab = 0
+                    }
+                    pastedUrl = text
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SVPurple),
+                modifier = Modifier.fillMaxWidth().height(44.dp)
+            ) {
+                Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Вставить из буфера", fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = SVBgDeep,
@@ -62,8 +86,8 @@ fun AddServerSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             when (selectedTab) {
-                0 -> ServerUrlTab(onAdd = onAdd, onDismiss = onDismiss)
-                1 -> SubscriptionTab(onAddSubscription = onAddSubscription, onDismiss = onDismiss)
+                0 -> ServerUrlTab(onAdd = onAdd, onDismiss = onDismiss, initialUrl = pastedUrl)
+                1 -> SubscriptionTab(onAddSubscription = onAddSubscription, onDismiss = onDismiss, initialUrl = pastedUrl)
             }
         }
     }
@@ -73,8 +97,9 @@ fun AddServerSheet(
 private fun ServerUrlTab(
     onAdd: (String) -> Boolean,
     onDismiss: () -> Unit,
+    initialUrl: String = "",
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var error by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
@@ -163,8 +188,9 @@ private fun ServerUrlTab(
 private fun SubscriptionTab(
     onAddSubscription: (String, (Int, String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
+    initialUrl: String = "",
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
