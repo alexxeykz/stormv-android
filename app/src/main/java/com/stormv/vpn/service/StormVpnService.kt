@@ -16,12 +16,16 @@ import com.stormv.vpn.util.AppLogger
 import com.stormv.vpn.util.ConfigBuilder
 import com.stormv.vpn.util.LogLevel
 import com.stormv.vpn.util.NativeUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 class StormVpnService : VpnService() {
@@ -45,8 +49,11 @@ class StormVpnService : VpnService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var vpnJob: Job? = null
     private var singBoxProcess: Process? = null
-    private var tun2socksProcess: Process? = null
+    private var tun2socksPid: Long = -1
+    private var tun2socksOutPfd: ParcelFileDescriptor? = null
     private var tunPfd: ParcelFileDescriptor? = null
+
+    @Volatile private var stopping = false
 
     inner class LocalBinder : Binder() {
         fun getService() = this@StormVpnService
@@ -112,7 +119,7 @@ class StormVpnService : VpnService() {
                     .directory(configDir)
                     .start()
 
-                readLogsAsync(singBoxProcess!!, "sing-box")
+                readLogsAsync(singBoxProcess!!.inputStream, "sing-box")
 
                 // Ждём пока sing-box поднимет порт
                 Thread.sleep(1500)
@@ -122,27 +129,26 @@ class StormVpnService : VpnService() {
                 }
                 AppLogger.i("VpnService", "sing-box запущен")
 
-                // ── 3. Запускаем tun2socks: fd → socks5://127.0.0.1:2080 ──────
+                // ── 3. Запускаем tun2socks через JNI fork()+execv() ─────────
+                // ProcessBuilder (Android API 28+) использует posix_spawn с
+                // POSIX_SPAWN_CLOEXEC_DEFAULT и закрывает все fd в дочернем
+                // процессе. fork()+execv() напрямую наследует tunFd без ограничений.
                 val tun2socksFile = File(applicationInfo.nativeLibraryDir, "libtun2socks.so")
                 if (!tun2socksFile.exists()) throw Exception("tun2socks не найден. Переустановите приложение.")
 
                 AppLogger.i("VpnService", "Запуск tun2socks: fd=$tunFd → socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}")
-                tun2socksProcess = ProcessBuilder(
-                    tun2socksFile.absolutePath,
-                    "-device", "fd://$tunFd",
-                    "-proxy", "socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}",
-                    "-loglevel", "info"
-                )
-                    .redirectErrorStream(true)
-                    .directory(configDir)
-                    .start()
+                val forkResult = NativeUtils.startTun2socksNative(
+                    tun2socksFile.absolutePath, tunFd, ConfigBuilder.PROXY_PORT
+                ) ?: throw Exception("Не удалось запустить tun2socks (fork failed)")
 
-                readLogsAsync(tun2socksProcess!!, "tun2socks")
+                tun2socksPid = forkResult[0]
+                val pipeReadFd = forkResult[1].toInt()
+                tun2socksOutPfd = ParcelFileDescriptor.adoptFd(pipeReadFd)
+                readLogsAsync(ParcelFileDescriptor.AutoCloseInputStream(tun2socksOutPfd!!), "tun2socks")
 
                 Thread.sleep(1000)
-                if (tun2socksProcess?.isAlive == false) {
-                    val out = tun2socksProcess?.inputStream?.bufferedReader()?.readText()?.trim() ?: ""
-                    throw Exception("tun2socks упал:\n$out")
+                if (!NativeUtils.isProcessAlive(tun2socksPid)) {
+                    throw Exception("tun2socks упал сразу после запуска")
                 }
                 AppLogger.i("VpnService", "tun2socks запущен")
 
@@ -152,29 +158,41 @@ class StormVpnService : VpnService() {
                 updateNotification("Подключено")
                 AppLogger.i("VpnService", "VPN активен: ${server.host}:${server.port}")
 
-                // Ждём пока один из процессов не завершится
-                val exitCode = tun2socksProcess!!.waitFor()
-                AppLogger.w("VpnService", "tun2socks завершился с кодом $exitCode")
-                if (exitCode != 0) throw Exception("tun2socks завершился с кодом $exitCode")
+                // Мониторим tun2socks через polling с delay() — единственный способ
+                // сделать блок отменяемым. waitpid() блокирует JNI-поток навсегда и
+                // не реагирует на vpnJob.cancel(). delay() — точка отмены корутины.
+                while (isActive) {
+                    delay(500)
+                    if (!NativeUtils.isProcessAlive(tun2socksPid)) {
+                        throw Exception("tun2socks неожиданно завершился")
+                    }
+                }
+                // Сюда попадаем только при отмене корутины из stopVpn() — это штатный выход.
 
+            } catch (e: CancellationException) {
+                // Штатная отмена через vpnJob.cancel() из stopVpn() — не ошибка, молчим.
+                throw e
             } catch (e: Exception) {
                 AppLogger.e("VpnService", "Ошибка: ${e.message}")
                 isRunning = false
                 lastError = e.message
                 onStatusChanged?.invoke(false, e.message)
-                stopSelf()
+                // stopVpn() убивает процессы и закрывает TUN.
+                // Если не вызвать его здесь — TUN остаётся открытым, трафик идёт
+                // через мёртвый VPN и интернет "не работает" даже при статусе "отключено".
+                stopVpn()
             }
         }
     }
 
-    private fun readLogsAsync(process: Process, tag: String) {
+    private fun readLogsAsync(stream: InputStream, tag: String) {
         scope.launch {
-            process.inputStream.bufferedReader().forEachLine { line ->
+            stream.bufferedReader().forEachLine { line ->
                 val level = when {
-                    line.contains("error", ignoreCase = true)   -> LogLevel.ERROR
-                    line.contains("warn", ignoreCase = true)    -> LogLevel.WARNING
-                    line.contains("debug", ignoreCase = true)   -> LogLevel.DEBUG
-                    else                                         -> LogLevel.INFO
+                    line.contains("error", ignoreCase = true) -> LogLevel.ERROR
+                    line.contains("warn",  ignoreCase = true) -> LogLevel.WARNING
+                    line.contains("debug", ignoreCase = true) -> LogLevel.DEBUG
+                    else                                       -> LogLevel.INFO
                 }
                 AppLogger.write(level, tag, line)
             }
@@ -182,11 +200,16 @@ class StormVpnService : VpnService() {
     }
 
     private fun stopVpn() {
+        if (stopping) return
+        stopping = true
         AppLogger.i("VpnService", "Остановка VPN...")
         vpnJob?.cancel()
-        tun2socksProcess?.destroyForcibly()
-        tun2socksProcess?.waitFor(3, TimeUnit.SECONDS)
-        tun2socksProcess = null
+        if (tun2socksPid > 0) {
+            NativeUtils.killProcess(tun2socksPid)
+            tun2socksPid = -1
+        }
+        tun2socksOutPfd?.close()
+        tun2socksOutPfd = null
         singBoxProcess?.destroyForcibly()
         singBoxProcess?.waitFor(3, TimeUnit.SECONDS)
         singBoxProcess = null
@@ -197,6 +220,7 @@ class StormVpnService : VpnService() {
         onStatusChanged?.invoke(false, null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+        stopping = false
         AppLogger.i("VpnService", "VPN остановлен")
     }
 
