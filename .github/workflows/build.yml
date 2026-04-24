@@ -61,7 +61,7 @@ jobs:
             echo "tun2socks ${ABI}: OK ($(du -h "app/src/main/jniLibs/${ABI}/libtun2socks.so" | cut -f1))"
           }
 
-          download_tun2socks arm64-v8a android-arm64
+          download_tun2socks arm64-v8a linux-arm64
           download_tun2socks x86_64    linux-amd64
 
       - name: Decode keystore
