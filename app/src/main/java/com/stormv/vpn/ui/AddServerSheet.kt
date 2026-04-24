@@ -23,6 +23,7 @@ fun AddServerSheet(
     onDismiss: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var sharedUrl by remember { mutableStateOf("") }
     val tabs = listOf("Ссылка", "Подписка")
 
     ModalBottomSheet(
@@ -62,8 +63,13 @@ fun AddServerSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             when (selectedTab) {
-                0 -> ServerUrlTab(onAdd = onAdd, onDismiss = onDismiss)
-                1 -> SubscriptionTab(onAddSubscription = onAddSubscription, onDismiss = onDismiss)
+                0 -> ServerUrlTab(
+                    onAdd = onAdd,
+                    onDismiss = onDismiss,
+                    initialUrl = sharedUrl,
+                    onSwitchToSubscription = { text -> sharedUrl = text; selectedTab = 1 }
+                )
+                1 -> SubscriptionTab(onAddSubscription = onAddSubscription, onDismiss = onDismiss, initialUrl = sharedUrl)
             }
         }
     }
@@ -73,8 +79,10 @@ fun AddServerSheet(
 private fun ServerUrlTab(
     onAdd: (String) -> Boolean,
     onDismiss: () -> Unit,
+    initialUrl: String = "",
+    onSwitchToSubscription: (String) -> Unit = {},
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var error by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
@@ -110,7 +118,13 @@ private fun ServerUrlTab(
         OutlinedButton(
             onClick = {
                 val text = clipboard.getText()?.text?.trim() ?: ""
-                if (text.isNotEmpty()) { url = text; error = "" }
+                if (text.isNotEmpty()) {
+                    if (text.startsWith("http://") || text.startsWith("https://")) {
+                        onSwitchToSubscription(text)
+                    } else {
+                        url = text; error = ""
+                    }
+                }
             },
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = SVPurple),
@@ -163,8 +177,9 @@ private fun ServerUrlTab(
 private fun SubscriptionTab(
     onAddSubscription: (String, (Int, String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
+    initialUrl: String = "",
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
