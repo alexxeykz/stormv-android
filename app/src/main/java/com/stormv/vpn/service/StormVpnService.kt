@@ -93,11 +93,7 @@ class StormVpnService : VpnService() {
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
                 // Снимаем FD_CLOEXEC чтобы fd был виден дочернему процессу sing-box
-                try {
-                    android.system.Os.fcntl(tunPfd!!.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
-                } catch (e: Exception) {
-                    AppLogger.w("VpnService", "fcntl: ${e.message}")
-                }
+                clearFdCloexec(tunPfd!!)
 
                 // ── 2. Запускаем sing-box в TUN режиме (fd → VPN сервер) ─────
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
@@ -174,6 +170,28 @@ class StormVpnService : VpnService() {
     override fun onDestroy() {
         stopVpn()
         super.onDestroy()
+    }
+
+    // Снимаем FD_CLOEXEC через доступный публичный API или reflection
+    private fun clearFdCloexec(pfd: android.os.ParcelFileDescriptor) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                @Suppress("NewApi")
+                android.system.Os.fcntlInt(pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
+                AppLogger.d("VpnService", "FD_CLOEXEC cleared via fcntlInt (API 34+)")
+            } else {
+                // На API < 34 пробуем через libcore reflection
+                val libcore = Class.forName("libcore.io.Libcore")
+                val os = libcore.getDeclaredField("os").apply { isAccessible = true }.get(null)
+                val method = os!!.javaClass.methods.firstOrNull { m ->
+                    m.name == "fcntl" && m.parameterCount == 3
+                }
+                method?.invoke(os, pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
+                AppLogger.d("VpnService", "FD_CLOEXEC cleared via reflection")
+            }
+        } catch (e: Exception) {
+            AppLogger.w("VpnService", "clearFdCloexec: ${e.message} — fd may not be inherited")
+        }
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────
