@@ -43,6 +43,7 @@ class StormVpnService : VpnService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var vpnJob: Job? = null
     private var singBoxProcess: Process? = null
+    private var tun2socksProcess: Process? = null
     private var tunPfd: ParcelFileDescriptor? = null
 
     inner class LocalBinder : Binder() {
@@ -75,7 +76,7 @@ class StormVpnService : VpnService() {
                 AppLogger.i("VpnService", "Запуск: ${server.displayName} [${server.protocol}] ${server.host}:${server.port}")
 
                 // ── 1. Создаём TUN интерфейс ──────────────────────────────────
-                val builder = Builder()
+                val tun = Builder()
                     .setSession("StormV")
                     .addAddress("172.19.0.1", 30)
                     .addAddress("fdfe:dcba:9876::1", 126)
@@ -85,62 +86,73 @@ class StormVpnService : VpnService() {
                     .addDnsServer("8.8.4.4")
                     .setMtu(8500)
                     .setBlocking(false)
-                    .addDisallowedApplication(packageName) // наш процесс (sing-box) идёт в обход VPN
+                    .addDisallowedApplication(packageName)
 
-                tunPfd = builder.establish()
-                    ?: throw Exception("Не удалось создать TUN интерфейс")
+                tunPfd = tun.establish() ?: throw Exception("Не удалось создать TUN интерфейс")
                 val tunFd = tunPfd!!.fd
                 AppLogger.i("VpnService", "TUN создан, fd=$tunFd")
 
-                // Снимаем FD_CLOEXEC чтобы fd был виден дочернему процессу sing-box
+                // Снимаем FD_CLOEXEC — нужно для tun2socks
                 clearFdCloexec(tunPfd!!)
 
-                // ── 2. Запускаем sing-box в TUN режиме (fd → VPN сервер) ─────
-                val configDir = File(filesDir, "singbox").also { it.mkdirs() }
-                val configFile = File(configDir, "config.json")
-                configFile.writeText(ConfigBuilder.build(server, tunFd))
-
+                // ── 2. Запускаем sing-box как SOCKS5/HTTP прокси на 127.0.0.1:2080 ──
                 val singBoxFile = File(applicationInfo.nativeLibraryDir, "libsingbox.so")
                 if (!singBoxFile.exists()) throw Exception("sing-box не найден. Переустановите приложение.")
 
-                AppLogger.i("VpnService", "Запуск sing-box TUN: fd=$tunFd → ${server.host}:${server.port}")
+                val configDir = File(filesDir, "singbox").also { it.mkdirs() }
+                val configFile = File(configDir, "config.json")
+                configFile.writeText(ConfigBuilder.build(server))
+
+                AppLogger.i("VpnService", "Запуск sing-box SOCKS5 на :${ConfigBuilder.PROXY_PORT}")
                 singBoxProcess = ProcessBuilder(singBoxFile.absolutePath, "run", "-c", configFile.absolutePath)
                     .redirectErrorStream(true)
                     .directory(configDir)
                     .start()
 
-                // Ждём 2 сек и проверяем — если упал, читаем вывод синхронно
-                Thread.sleep(2000)
+                readLogsAsync(singBoxProcess!!, "sing-box")
+
+                // Ждём пока sing-box поднимет порт
+                Thread.sleep(1500)
                 if (singBoxProcess?.isAlive == false) {
-                    val output = singBoxProcess?.inputStream?.bufferedReader()?.readText()?.trim() ?: ""
-                    throw Exception("sing-box упал:\n$output")
+                    val out = singBoxProcess?.inputStream?.bufferedReader()?.readText()?.trim() ?: ""
+                    throw Exception("sing-box упал:\n$out")
                 }
-
-                // Процесс жив — читаем логи в фоне
-                scope.launch {
-                    singBoxProcess?.inputStream?.bufferedReader()?.forEachLine { line ->
-                        val level = when {
-                            line.contains("error", ignoreCase = true)  -> LogLevel.ERROR
-                            line.contains("warn", ignoreCase = true)   -> LogLevel.WARNING
-                            line.contains("debug", ignoreCase = true)  -> LogLevel.DEBUG
-                            else                                        -> LogLevel.INFO
-                        }
-                        AppLogger.write(level, "sing-box", line)
-                    }
-                }
-
                 AppLogger.i("VpnService", "sing-box запущен")
+
+                // ── 3. Запускаем tun2socks: fd → socks5://127.0.0.1:2080 ──────
+                val tun2socksFile = File(applicationInfo.nativeLibraryDir, "libtun2socks.so")
+                if (!tun2socksFile.exists()) throw Exception("tun2socks не найден. Переустановите приложение.")
+
+                AppLogger.i("VpnService", "Запуск tun2socks: fd=$tunFd → socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}")
+                tun2socksProcess = ProcessBuilder(
+                    tun2socksFile.absolutePath,
+                    "-device", "fd://$tunFd",
+                    "-proxy", "socks5://127.0.0.1:${ConfigBuilder.PROXY_PORT}",
+                    "-loglevel", "info"
+                )
+                    .redirectErrorStream(true)
+                    .directory(configDir)
+                    .start()
+
+                readLogsAsync(tun2socksProcess!!, "tun2socks")
+
+                Thread.sleep(1000)
+                if (tun2socksProcess?.isAlive == false) {
+                    val out = tun2socksProcess?.inputStream?.bufferedReader()?.readText()?.trim() ?: ""
+                    throw Exception("tun2socks упал:\n$out")
+                }
+                AppLogger.i("VpnService", "tun2socks запущен")
 
                 isRunning = true
                 lastError = null
                 onStatusChanged?.invoke(true, null)
                 updateNotification("Подключено")
-                AppLogger.i("VpnService", "Подключено!")
+                AppLogger.i("VpnService", "VPN активен: ${server.host}:${server.port}")
 
-                // Ждём завершения любого из процессов
-                val exitCode = singBoxProcess!!.waitFor()
-                AppLogger.w("VpnService", "sing-box завершился с кодом $exitCode")
-                if (exitCode != 0) throw Exception("sing-box завершился с кодом $exitCode")
+                // Ждём пока один из процессов не завершится
+                val exitCode = tun2socksProcess!!.waitFor()
+                AppLogger.w("VpnService", "tun2socks завершился с кодом $exitCode")
+                if (exitCode != 0) throw Exception("tun2socks завершился с кодом $exitCode")
 
             } catch (e: Exception) {
                 AppLogger.e("VpnService", "Ошибка: ${e.message}")
@@ -152,9 +164,25 @@ class StormVpnService : VpnService() {
         }
     }
 
+    private fun readLogsAsync(process: Process, tag: String) {
+        scope.launch {
+            process.inputStream.bufferedReader().forEachLine { line ->
+                val level = when {
+                    line.contains("error", ignoreCase = true)   -> LogLevel.ERROR
+                    line.contains("warn", ignoreCase = true)    -> LogLevel.WARNING
+                    line.contains("debug", ignoreCase = true)   -> LogLevel.DEBUG
+                    else                                         -> LogLevel.INFO
+                }
+                AppLogger.write(level, tag, line)
+            }
+        }
+    }
+
     private fun stopVpn() {
         AppLogger.i("VpnService", "Остановка VPN...")
         vpnJob?.cancel()
+        tun2socksProcess?.destroyForcibly()
+        tun2socksProcess = null
         singBoxProcess?.destroyForcibly()
         singBoxProcess = null
         tunPfd?.close()
@@ -172,29 +200,27 @@ class StormVpnService : VpnService() {
         super.onDestroy()
     }
 
-    // Снимаем FD_CLOEXEC через доступный публичный API или reflection
-    private fun clearFdCloexec(pfd: android.os.ParcelFileDescriptor) {
+    private fun clearFdCloexec(pfd: ParcelFileDescriptor) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
                 @Suppress("NewApi")
                 android.system.Os.fcntlInt(pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
-                AppLogger.d("VpnService", "FD_CLOEXEC cleared via fcntlInt (API 34+)")
+                AppLogger.d("VpnService", "FD_CLOEXEC cleared (API 34+)")
             } else {
-                // На API < 34 пробуем через libcore reflection
                 val libcore = Class.forName("libcore.io.Libcore")
                 val os = libcore.getDeclaredField("os").apply { isAccessible = true }.get(null)
                 val method = os!!.javaClass.methods.firstOrNull { m ->
                     m.name == "fcntl" && m.parameterCount == 3
                 }
                 method?.invoke(os, pfd.fileDescriptor, android.system.OsConstants.F_SETFD, 0)
-                AppLogger.d("VpnService", "FD_CLOEXEC cleared via reflection")
+                AppLogger.d("VpnService", "FD_CLOEXEC cleared (reflection)")
             }
         } catch (e: Exception) {
-            AppLogger.w("VpnService", "clearFdCloexec: ${e.message} — fd may not be inherited")
+            AppLogger.w("VpnService", "clearFdCloexec: ${e.message}")
         }
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────────
+    // ── Notifications ──────────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(

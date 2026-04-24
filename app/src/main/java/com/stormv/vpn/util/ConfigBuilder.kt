@@ -6,24 +6,24 @@ import com.stormv.vpn.model.ServerConfig
 
 /**
  * Генерирует sing-box JSON конфиг для всех 7 протоколов.
- * Архитектура: sing-box в TUN режиме — принимает fd от Android VpnService напрямую.
- * tun2socks не нужен.
+ * Архитектура: sing-box как mixed (SOCKS5+HTTP) прокси на 127.0.0.1:2080.
+ * TUN fd → tun2socks → sing-box:2080 → VPN сервер.
  */
 object ConfigBuilder {
 
+    const val PROXY_PORT = 2080
+
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
-    fun build(server: ServerConfig, tunFd: Int): String {
+    fun build(server: ServerConfig): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "inbounds" to listOf(
                 mapOf(
-                    "type" to "tun",
-                    "tag" to "tun-in",
-                    "fd" to tunFd,
-                    "mtu" to 8500,
-                    "auto_route" to false,
-                    "stack" to "system",
+                    "type" to "mixed",
+                    "tag" to "mixed-in",
+                    "listen" to "127.0.0.1",
+                    "listen_port" to PROXY_PORT,
                     "sniff" to true,
                     "sniff_override_destination" to false
                 )
@@ -35,36 +35,15 @@ object ConfigBuilder {
             ),
             "route" to mapOf(
                 "rules" to listOf(
-                    // Локальные адреса — напрямую
                     mapOf(
                         "ip_cidr" to listOf(
                             "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
                             "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
                         ),
                         "outbound" to "direct"
-                    ),
-                    // Telegram — через прокси
-                    mapOf(
-                        "domain_suffix" to listOf("telegram.org", "t.me", "telegram.me", "telesco.pe"),
-                        "outbound" to "proxy"
-                    ),
-                    mapOf(
-                        "ip_cidr" to listOf(
-                            "91.108.0.0/16", "91.105.192.0/23",
-                            "149.154.160.0/20", "185.76.151.0/24", "95.161.76.0/24"
-                        ),
-                        "outbound" to "proxy"
-                    ),
-                    // YouTube — через прокси
-                    mapOf(
-                        "domain_suffix" to listOf(
-                            "youtube.com", "youtu.be", "googlevideo.com",
-                            "ytimg.com", "ggpht.com", "youtube-nocookie.com"
-                        ),
-                        "outbound" to "proxy"
                     )
                 ),
-                "final" to "direct"
+                "final" to "proxy"
             )
         )
         return gson.toJson(config)
