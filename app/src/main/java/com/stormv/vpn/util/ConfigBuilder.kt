@@ -88,16 +88,31 @@ object ConfigBuilder {
     }
 
     /**
-     * Перестраивает хранящийся singboxConfig с актуальными пользовательскими сайтами.
-     * Вызывается при каждом старте VPN, чтобы подхватить изменения в настройках.
+     * Обновляет route-секцию хранящегося singboxConfig с актуальными пользовательскими сайтами.
+     * Не трогает outbounds — числа остаются числами, никакой конвертации типов Gson.
      */
     fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>): String {
         return try {
-            val stored = JsonParser.parseString(storedJson).asJsonObject
-            val outboundsJson = stored.getAsJsonArray("outbounds")
-            val type = object : TypeToken<List<Any>>() {}.type
-            val outboundsList: List<Any> = gson.fromJson(outboundsJson, type)
-            buildAuto(outboundsList, userVpnSites)
+            val config = JsonParser.parseString(storedJson).asJsonObject
+
+            // Заменяем только route — outbounds не трогаем (без риска Double вместо Int)
+            val routeObj = com.google.gson.JsonObject()
+            routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites)))
+            routeObj.addProperty("final", "direct")
+            config.add("route", routeObj)
+
+            // Добавляем clash_api если отсутствует
+            val expObj = if (config.has("experimental"))
+                config.getAsJsonObject("experimental")
+            else com.google.gson.JsonObject().also { config.add("experimental", it) }
+
+            if (!expObj.has("clash_api")) {
+                val clashObj = com.google.gson.JsonObject()
+                clashObj.addProperty("external_controller", "127.0.0.1:$CLASH_API_PORT")
+                expObj.add("clash_api", clashObj)
+            }
+
+            gson.toJson(config)
         } catch (e: Exception) {
             AppLogger.w("ConfigBuilder", "applyRoutingPolicy fallback: ${e.message}")
             storedJson
