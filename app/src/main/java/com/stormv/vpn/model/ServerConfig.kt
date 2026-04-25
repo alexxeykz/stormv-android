@@ -53,6 +53,7 @@ data class ServerConfig(
     val isAuto: Boolean = false,
     val singboxConfig: String = "",
     val serverCount: Int = 0,
+    val isSubscription: Boolean = false,
 ) {
     val displayName: String
         get() = if (isAuto) name else name.ifBlank { "${protocol.label} · $host:$port" }

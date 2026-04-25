@@ -20,7 +20,7 @@ object SubscriptionManager {
             connection.readTimeout = 15000
             val raw = connection.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
 
-            tryParseSingbox(raw)?.let { return@runCatching listOf(it) }
+            tryParseSingbox(raw)?.let { return@runCatching it }
 
             val content = tryBase64Decode(raw) ?: raw
             val servers = content
@@ -34,7 +34,8 @@ object SubscriptionManager {
         }
     }
 
-    private fun tryParseSingbox(raw: String): ServerConfig? = runCatching {
+    // Returns [autoServer(hidden)] + [individual servers(visible)]
+    private fun tryParseSingbox(raw: String): List<ServerConfig>? = runCatching {
         if (!raw.startsWith("{")) return null
         val type = object : TypeToken<Map<String, Any>>() {}.type
         val json: Map<String, Any> = Gson().fromJson(raw, type) ?: return null
@@ -43,22 +44,20 @@ object SubscriptionManager {
         val filtered = outbounds.filterIsInstance<Map<*, *>>().filter { ob ->
             (ob["type"] as? String) !in listOf("selector", "dns")
         }
+        val individual = outbounds.filterIsInstance<Map<*, *>>()
+            .mapNotNull { SingboxOutboundParser.parse(it) }
 
-        val serverCount = outbounds.filterIsInstance<Map<*, *>>().count { ob ->
-            (ob["type"] as? String) !in listOf("urltest", "selector", "direct", "block", "dns")
-        }
+        if (individual.isEmpty()) return null
 
-        if (serverCount == 0) return null
-
-        val config = ConfigBuilder.buildAuto(filtered)
-
-        ServerConfig(
-            name = "Auto · $serverCount серв.",
+        val autoServer = ServerConfig(
+            name = "Auto · ${individual.size} серв.",
             protocol = Protocol.VLESS,
             isAuto = true,
-            singboxConfig = config,
-            serverCount = serverCount
+            singboxConfig = ConfigBuilder.buildAuto(filtered),
+            serverCount = individual.size
         )
+
+        listOf(autoServer) + individual
     }.getOrNull()
 
     private fun tryBase64Decode(s: String): String? = runCatching {

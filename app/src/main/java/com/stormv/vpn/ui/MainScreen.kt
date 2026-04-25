@@ -55,6 +55,7 @@ fun MainScreen(
             servers = state.servers,
             selectedServer = state.selectedServer,
             pingResults = state.pingResults,
+            activeServerTag = state.activeServerTag,
             onSelect = onSelectServer,
             onRemove = onRemoveServer,
             onAdd = onAddServer,
@@ -166,6 +167,7 @@ private fun ServerListCard(
     servers: List<ServerConfig>,
     selectedServer: ServerConfig?,
     pingResults: Map<String, String>,
+    activeServerTag: String?,
     onSelect: (ServerConfig) -> Unit,
     onRemove: (ServerConfig) -> Unit,
     onAdd: () -> Unit,
@@ -227,6 +229,7 @@ private fun ServerListCard(
                         ServerItem(
                             server = server,
                             isSelected = server.id == selectedServer?.id,
+                            isActive = activeServerTag != null && server.name == activeServerTag,
                             ping = pingResults[server.id] ?: "",
                             onClick = { onSelect(server) },
                             onRemove = { onRemove(server) }
@@ -242,6 +245,7 @@ private fun ServerListCard(
 private fun ServerItem(
     server: ServerConfig,
     isSelected: Boolean,
+    isActive: Boolean,
     ping: String,
     onClick: () -> Unit,
     onRemove: () -> Unit,
@@ -261,25 +265,36 @@ private fun ServerItem(
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         // Протокол-бейдж
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(width = 48.dp, height = 32.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(
-                    Brush.linearGradientBrush(
-                        colors = listOf(SVPurple.copy(alpha = 0.2f), SVBlue.copy(alpha = 0.2f))
+        Box(modifier = Modifier.size(width = 48.dp, height = 32.dp)) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        Brush.linearGradientBrush(
+                            colors = listOf(SVPurple.copy(alpha = 0.2f), SVBlue.copy(alpha = 0.2f))
+                        )
+                    )
+            ) {
+                Text(
+                    text = if (server.isAuto) "AUTO" else server.protocol.label,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = LocalTextStyle.current.copy(
+                        brush = Brush.linearGradientBrush(listOf(SVPurple, SVBlue))
                     )
                 )
-        ) {
-            Text(
-                text = if (server.isAuto) "AUTO" else server.protocol.label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                style = LocalTextStyle.current.copy(
-                    brush = Brush.linearGradientBrush(listOf(SVPurple, SVBlue))
+            }
+            if (isActive) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .align(Alignment.TopEnd)
+                        .clip(CircleShape)
+                        .background(SVSuccess)
                 )
-            )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))

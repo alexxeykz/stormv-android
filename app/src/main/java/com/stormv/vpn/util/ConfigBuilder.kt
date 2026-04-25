@@ -15,9 +15,16 @@ object ConfigBuilder {
 
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
+    const val CLASH_API_PORT = 9090
+
     fun buildAuto(serverOutbounds: List<Any>): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
+            "experimental" to mapOf(
+                "clash_api" to mapOf(
+                    "external_controller" to "127.0.0.1:$CLASH_API_PORT"
+                )
+            ),
             "inbounds" to listOf(
                 mapOf(
                     "type" to "mixed",
