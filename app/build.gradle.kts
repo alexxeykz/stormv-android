@@ -53,6 +53,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true   // нужно для BuildConfig.VERSION_CODE/VERSION_NAME в UpdateManager
     }
 
     externalNativeBuild {
