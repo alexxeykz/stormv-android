@@ -64,12 +64,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun pingAll(servers: List<ServerConfig> = _state.value.servers) {
         viewModelScope.launch {
-            // Показываем "..." сразу
+            val pingable = servers.filter { !it.isAuto }
             _state.value = _state.value.copy(
-                pingResults = servers.associate { it.id to "..." }
+                pingResults = pingable.associate { it.id to "..." }
             )
-            // Пингуем параллельно
-            val results = servers.map { server ->
+            val results = pingable.map { server ->
                 async {
                     val ms = PingUtil.ping(server.host, server.port)
                     server.id to (if (ms != null) "$ms ms" else "—")
@@ -102,14 +101,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = SubscriptionManager.fetch(url)
             result.onSuccess { servers ->
-                servers.forEach { ServerRepository.add(it) }
+                val autoServer = servers.firstOrNull { it.isAuto }
+                if (autoServer != null) {
+                    // Заменяем старый авто-сервер, ручные серверы оставляем
+                    val existing = ServerRepository.loadAll().filter { !it.isAuto }
+                    ServerRepository.saveAll(listOf(autoServer) + existing)
+                } else {
+                    servers.forEach { ServerRepository.add(it) }
+                }
                 val updated = ServerRepository.loadAll()
                 _state.value = _state.value.copy(
                     servers = updated,
-                    selectedServer = _state.value.selectedServer ?: servers.firstOrNull()
+                    selectedServer = autoServer ?: _state.value.selectedServer ?: servers.firstOrNull()
                 )
-                AppLogger.i("UI", "Подписка: добавлено ${servers.size} серверов")
-                onResult(servers.size, null)
+                val count = autoServer?.serverCount ?: servers.size
+                AppLogger.i("UI", "Подписка: $count серверов (авто=${autoServer != null})")
+                onResult(count, null)
             }.onFailure { e ->
                 AppLogger.e("UI", "Ошибка подписки: ${e.message}")
                 onResult(0, e.message)

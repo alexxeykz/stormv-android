@@ -48,7 +48,12 @@ data class ServerConfig(
     val localAddress: String = "",
     val allowedIps: List<String> = listOf("0.0.0.0/0", "::/0"),
     val mtu: Int = 1420,
+
+    // Auto mode (subscription singbox urltest)
+    val isAuto: Boolean = false,
+    val singboxConfig: String = "",
+    val serverCount: Int = 0,
 ) {
     val displayName: String
-        get() = name.ifBlank { "${protocol.label} · $host:$port" }
+        get() = if (isAuto) name else name.ifBlank { "${protocol.label} · $host:$port" }
 }

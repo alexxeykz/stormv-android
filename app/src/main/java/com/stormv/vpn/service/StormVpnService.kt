@@ -82,7 +82,10 @@ class StormVpnService : VpnService() {
         vpnJob = scope.launch {
             try {
                 val server = com.google.gson.Gson().fromJson(serverJson, ServerConfig::class.java)
-                AppLogger.i("VpnService", "Запуск: ${server.displayName} [${server.protocol}] ${server.host}:${server.port}")
+                if (server.isAuto)
+                    AppLogger.i("VpnService", "Запуск (Auto): ${server.displayName} [${server.serverCount} серв.]")
+                else
+                    AppLogger.i("VpnService", "Запуск: ${server.displayName} [${server.protocol}] ${server.host}:${server.port}")
 
                 // ── 1. Создаём TUN интерфейс ──────────────────────────────────
                 val tun = Builder()
@@ -111,7 +114,9 @@ class StormVpnService : VpnService() {
 
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
-                configFile.writeText(ConfigBuilder.build(server))
+                configFile.writeText(
+                    if (server.isAuto) server.singboxConfig else ConfigBuilder.build(server)
+                )
 
                 AppLogger.i("VpnService", "Запуск sing-box SOCKS5 на :${ConfigBuilder.PROXY_PORT}")
                 singBoxProcess = ProcessBuilder(singBoxFile.absolutePath, "run", "-c", configFile.absolutePath)

@@ -273,7 +273,7 @@ private fun ServerItem(
                 )
         ) {
             Text(
-                text = server.protocol.label,
+                text = if (server.isAuto) "AUTO" else server.protocol.label,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 style = LocalTextStyle.current.copy(
@@ -293,13 +293,15 @@ private fun ServerItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                text = EncryptionHelper.maskSensitive(server.host),
-                fontSize = 12.sp,
-                color = SVTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (!server.isAuto) {
+                Text(
+                    text = EncryptionHelper.maskSensitive(server.host),
+                    fontSize = 12.sp,
+                    color = SVTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
 
         // Пинг

@@ -15,6 +15,36 @@ object ConfigBuilder {
 
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
+    fun buildAuto(serverOutbounds: List<Any>): String {
+        val config = mapOf(
+            "log" to mapOf("level" to "info", "timestamp" to true),
+            "inbounds" to listOf(
+                mapOf(
+                    "type" to "mixed",
+                    "tag" to "mixed-in",
+                    "listen" to "127.0.0.1",
+                    "listen_port" to PROXY_PORT,
+                    "sniff" to true,
+                    "sniff_override_destination" to false
+                )
+            ),
+            "outbounds" to serverOutbounds,
+            "route" to mapOf(
+                "rules" to listOf(
+                    mapOf(
+                        "ip_cidr" to listOf(
+                            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                            "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
+                        ),
+                        "outbound" to "direct"
+                    )
+                ),
+                "final" to "auto"
+            )
+        )
+        return gson.toJson(config)
+    }
+
     fun build(server: ServerConfig): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
