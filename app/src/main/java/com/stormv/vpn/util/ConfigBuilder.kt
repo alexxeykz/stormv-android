@@ -51,6 +51,8 @@ object ConfigBuilder {
     private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
         return listOf(
+            // sing-box 1.11+: sniff перенесён из inbound в route rule action
+            mapOf("action" to "sniff"),
             // Telegram + YouTube домены и пользовательские сайты → VPN
             mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
             // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
@@ -64,9 +66,7 @@ object ConfigBuilder {
         "type" to "mixed",
         "tag" to "mixed-in",
         "listen" to "127.0.0.1",
-        "listen_port" to PROXY_PORT,
-        "sniff" to true,
-        "sniff_override_destination" to false
+        "listen_port" to PROXY_PORT
     )
 
     // ── Auto (urltest) режим ──────────────────────────────────────────────────
@@ -94,6 +94,14 @@ object ConfigBuilder {
     fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>): String {
         return try {
             val config = JsonParser.parseString(storedJson).asJsonObject
+
+            // Удаляем deprecated поля из inbounds (sing-box 1.13+ их не принимает)
+            config.getAsJsonArray("inbounds")?.forEach { el ->
+                val inb = el.asJsonObject
+                inb.remove("sniff")
+                inb.remove("sniff_override_destination")
+                inb.remove("domain_strategy")
+            }
 
             // Заменяем только route — outbounds не трогаем (без риска Double вместо Int)
             val routeObj = com.google.gson.JsonObject()
