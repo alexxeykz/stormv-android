@@ -11,7 +11,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +43,8 @@ fun MainScreen(
     onAddServer: () -> Unit,
     onOpenSettings: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
+    onDownloadUpdate: () -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -47,6 +53,16 @@ fun MainScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        // ── Баннер обновления ─────────────────────────────────────────────────
+        if (state.updateInfo != null) {
+            UpdateBanner(
+                versionName = state.updateInfo.versionName,
+                downloadProgress = state.updateDownloadProgress,
+                onDownload = onDownloadUpdate,
+                onDismiss = onDismissUpdate
+            )
+        }
+
         // ── Логотип ──────────────────────────────────────────────────────────
         LogoHeader(onOpenSettings = onOpenSettings, onOpenLogs = onOpenLogs)
 
@@ -73,6 +89,72 @@ fun MainScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 20.dp)
         )
+    }
+}
+
+// ── Update Banner ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun UpdateBanner(
+    versionName: String,
+    downloadProgress: Int,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDownloading = downloadProgress in 0..99
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SVPurple.copy(alpha = 0.15f))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SystemUpdate,
+                    contentDescription = null,
+                    tint = SVPurpleLight,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Доступна версия $versionName",
+                    fontSize = 13.sp,
+                    color = SVTextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!isDownloading) {
+                    TextButton(
+                        onClick = onDownload,
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("Обновить", color = SVPurpleLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = null, tint = SVTextSecondary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            if (isDownloading) {
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { downloadProgress / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = SVPurpleLight,
+                    trackColor = SVPurple.copy(alpha = 0.3f)
+                )
+                Text(
+                    text = "Скачиваю... $downloadProgress%",
+                    fontSize = 11.sp,
+                    color = SVTextSecondary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
     }
 }
 

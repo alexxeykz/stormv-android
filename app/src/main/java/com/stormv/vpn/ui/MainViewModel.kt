@@ -15,6 +15,8 @@ import com.stormv.vpn.util.AppLogger
 import com.stormv.vpn.util.ConfigBuilder
 import com.stormv.vpn.util.PingUtil
 import com.stormv.vpn.util.SubscriptionManager
+import com.stormv.vpn.util.UpdateInfo
+import com.stormv.vpn.util.UpdateManager
 import com.stormv.vpn.util.UrlParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -43,6 +45,8 @@ data class MainUiState(
     val activeServerTag: String? = null,
     val telegramHealth: AppHealth = AppHealth.UNKNOWN,
     val youtubeHealth: AppHealth = AppHealth.UNKNOWN,
+    val updateInfo: UpdateInfo? = null,       // не null = доступна новая версия
+    val updateDownloadProgress: Int = -1,      // -1 = не скачиваем, 0-100 = прогресс
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -58,6 +62,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loadServers()
+        checkForUpdate()
         StormVpnService.onStatusChanged = { running, error ->
             val newStatus = if (running) VpnStatus.CONNECTED
                            else if (error != null) VpnStatus.ERROR
@@ -327,6 +332,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val map: Map<String, Any> = Gson().fromJson(json, type)
             map["now"] as? String
         }.getOrNull()
+    }
+
+    // ── Обновления ────────────────────────────────────────────────────────────
+
+    private fun checkForUpdate() {
+        viewModelScope.launch {
+            val info = UpdateManager.checkForUpdate()
+            if (info != null) {
+                _state.value = _state.value.copy(updateInfo = info)
+                AppLogger.i("Update", "Доступна версия ${info.versionName}")
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        _state.value = _state.value.copy(updateInfo = null)
+    }
+
+    fun downloadUpdate(context: android.content.Context) {
+        val info = _state.value.updateInfo ?: return
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(updateDownloadProgress = 0)
+                UpdateManager.downloadAndInstall(context, info) { progress ->
+                    _state.value = _state.value.copy(updateDownloadProgress = progress)
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Update", "Ошибка: ${e.message}")
+            } finally {
+                _state.value = _state.value.copy(updateDownloadProgress = -1)
+            }
+        }
     }
 
     override fun onCleared() {

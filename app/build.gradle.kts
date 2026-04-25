@@ -12,8 +12,9 @@ android {
         applicationId = "com.stormv.vpn"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // CI передаёт версию через env: BUILD_VERSION_CODE (YYYYMMDD) и BUILD_VERSION_NAME (YYYY.MM.DD)
+        versionCode = System.getenv("BUILD_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("BUILD_VERSION_NAME") ?: "1.0.0"
     }
 
     signingConfigs {

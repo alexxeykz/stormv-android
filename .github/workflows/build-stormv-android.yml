@@ -1,0 +1,113 @@
+name: Build StormV Android
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Generate version
+        id: version
+        run: |
+          DATE=$(date +"%Y.%m.%d")
+          CODE=$(date +"%Y%m%d")
+          echo "VERSION=$DATE" >> $GITHUB_OUTPUT
+          echo "CODE=$CODE"    >> $GITHUB_OUTPUT
+          echo "TAG=v$DATE"    >> $GITHUB_OUTPUT
+          echo "Version: $DATE (code $CODE)"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4.7.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download latest sing-box (arm64-v8a, x86_64)
+        run: |
+          VERSION=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \
+            | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
+          echo "sing-box version: $VERSION"
+          BASE="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}"
+
+          download_singbox() {
+            local ABI=$1 ARCH=$2
+            TMP=$(mktemp -d)
+            curl -fL "${BASE}/sing-box-${VERSION}-${ARCH}.tar.gz" | tar -xz -C "$TMP"
+            BINARY=$(find "$TMP" -name "sing-box" -type f | head -1)
+            mkdir -p "app/src/main/jniLibs/${ABI}"
+            cp "$BINARY" "app/src/main/jniLibs/${ABI}/libsingbox.so"
+            chmod +x "app/src/main/jniLibs/${ABI}/libsingbox.so"
+            rm -rf "$TMP"
+            echo "sing-box ${ABI}: OK ($(du -h "app/src/main/jniLibs/${ABI}/libsingbox.so" | cut -f1))"
+          }
+
+          download_singbox arm64-v8a android-arm64
+          download_singbox x86_64    android-amd64
+
+      - name: Download tun2socks (arm64-v8a, x86_64)
+        run: |
+          VERSION=$(curl -s "https://api.github.com/repos/xjasonlyu/tun2socks/releases/latest" \
+            | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
+          echo "tun2socks version: $VERSION"
+          BASE="https://github.com/xjasonlyu/tun2socks/releases/download/v${VERSION}"
+
+          download_tun2socks() {
+            local ABI=$1 ARCH=$2
+            TMP=$(mktemp -d)
+            curl -fL "${BASE}/tun2socks-${ARCH}.zip" -o "$TMP/t.zip"
+            unzip -q "$TMP/t.zip" -d "$TMP"
+            BINARY=$(find "$TMP" -type f ! -name "*.zip" | head -1)
+            mkdir -p "app/src/main/jniLibs/${ABI}"
+            cp "$BINARY" "app/src/main/jniLibs/${ABI}/libtun2socks.so"
+            chmod +x "app/src/main/jniLibs/${ABI}/libtun2socks.so"
+            rm -rf "$TMP"
+            echo "tun2socks ${ABI}: OK ($(du -h "app/src/main/jniLibs/${ABI}/libtun2socks.so" | cut -f1))"
+          }
+
+          download_tun2socks arm64-v8a linux-arm64
+          download_tun2socks x86_64    linux-amd64
+
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > stormv.jks
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+        env:
+          SIGNING_KEY_ALIAS:     ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD:  ${{ secrets.KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          BUILD_VERSION_NAME:    ${{ steps.version.outputs.VERSION }}
+          BUILD_VERSION_CODE:    ${{ steps.version.outputs.CODE }}
+
+      - name: Rename APK
+        run: |
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          cp "$APK" "StormV-${{ steps.version.outputs.VERSION }}.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: StormV-release
+          path: StormV-${{ steps.version.outputs.VERSION }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:    ${{ steps.version.outputs.TAG }}
+          name:        "StormV Android ${{ steps.version.outputs.VERSION }}"
+          body:        "Автоматическая сборка от ${{ steps.version.outputs.VERSION }}"
+          files:       StormV-${{ steps.version.outputs.VERSION }}.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
                         onAddServer = { showAddSheet = true },
                         onOpenSettings = { showSettings = true },
                         onOpenLogs = { showLogs = true },
+                        onDownloadUpdate = { vm.downloadUpdate(this@MainActivity) },
+                        onDismissUpdate = { vm.dismissUpdate() },
                     )
                 }
 
