@@ -27,9 +27,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URL
 
 enum class VpnStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
+enum class AppHealth { UNKNOWN, OK, DOWN }
 
 data class MainUiState(
     val servers: List<ServerConfig> = emptyList(),
@@ -38,6 +41,8 @@ data class MainUiState(
     val errorMessage: String? = null,
     val pingResults: Map<String, String> = emptyMap(),
     val activeServerTag: String? = null,
+    val telegramHealth: AppHealth = AppHealth.UNKNOWN,
+    val youtubeHealth: AppHealth = AppHealth.UNKNOWN,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,6 +52,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val gson = Gson()
     private var pollJob: Job? = null
+    private var healthJob: Job? = null
+    private var healthFailCount = 0
+    @Volatile private var isReconnecting = false
 
     init {
         loadServers()
@@ -59,12 +67,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 errorMessage = error,
                 activeServerTag = if (!running) null else _state.value.activeServerTag
             )
-            if (running && _state.value.selectedServer?.isSubscription == true) {
-                startPollingActiveServer()
-            } else if (!running) {
+            if (running) {
+                if (_state.value.selectedServer?.isSubscription == true) {
+                    startPollingActiveServer()
+                }
+                startHealthMonitoring()
+            } else {
                 pollJob?.cancel()
                 pollJob = null
-                _state.value = _state.value.copy(activeServerTag = null)
+                healthJob?.cancel()
+                healthJob = null
+                isReconnecting = false
+                _state.value = _state.value.copy(
+                    activeServerTag = null,
+                    telegramHealth = AppHealth.UNKNOWN,
+                    youtubeHealth = AppHealth.UNKNOWN
+                )
             }
         }
     }
@@ -205,6 +223,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppLogger.i("UI", "Отключение...")
         pollJob?.cancel()
         pollJob = null
+        healthJob?.cancel()
+        healthJob = null
+        isReconnecting = false
         val intent = Intent(getApplication(), StormVpnService::class.java).apply {
             action = StormVpnService.ACTION_STOP
         }
@@ -212,8 +233,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(
             status = VpnStatus.DISCONNECTED,
             errorMessage = null,
-            activeServerTag = null
+            activeServerTag = null,
+            telegramHealth = AppHealth.UNKNOWN,
+            youtubeHealth = AppHealth.UNKNOWN
         )
+    }
+
+    private fun startHealthMonitoring() {
+        healthJob?.cancel()
+        healthFailCount = 0
+        healthJob = viewModelScope.launch {
+            delay(15_000) // дать VPN стабилизироваться
+            while (true) {
+                val (tgOk, ytOk) = checkAppHealth()
+                _state.value = _state.value.copy(
+                    telegramHealth = if (tgOk) AppHealth.OK else AppHealth.DOWN,
+                    youtubeHealth  = if (ytOk) AppHealth.OK else AppHealth.DOWN
+                )
+                AppLogger.i("Health", "Telegram=$tgOk YouTube=$ytOk")
+                if (!tgOk && !ytOk) {
+                    healthFailCount++
+                    AppLogger.w("Health", "Telegram+YouTube недоступны (попытка $healthFailCount/2)")
+                    if (healthFailCount >= 2) {
+                        healthFailCount = 0
+                        triggerReconnect()
+                    }
+                } else {
+                    healthFailCount = 0
+                }
+                delay(30_000)
+            }
+        }
+    }
+
+    private suspend fun checkAppHealth(): Pair<Boolean, Boolean> = withContext(Dispatchers.IO) {
+        // Проверяем через SOCKS5 прокси (sing-box), а не напрямую —
+        // так проверяется именно доступность через VPN сервер.
+        val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ConfigBuilder.PROXY_PORT))
+        fun testUrl(urlStr: String): Boolean = runCatching {
+            val conn = URL(urlStr).openConnection(proxy) as HttpURLConnection
+            conn.connectTimeout = 6000
+            conn.readTimeout   = 6000
+            conn.requestMethod = "HEAD"
+            conn.instanceFollowRedirects = false
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..499
+        }.getOrElse { false }
+        val tgOk = testUrl("https://api.telegram.org")
+        val ytOk = testUrl("https://www.youtube.com")
+        tgOk to ytOk
+    }
+
+    private fun triggerReconnect() {
+        if (isReconnecting) return
+        isReconnecting = true
+        val server = _state.value.selectedServer ?: run { isReconnecting = false; return }
+        AppLogger.w("Health", "Переподключение (Telegram+YouTube недоступны)...")
+        viewModelScope.launch {
+            val stopIntent = Intent(getApplication(), StormVpnService::class.java).apply {
+                action = StormVpnService.ACTION_STOP
+            }
+            getApplication<Application>().startService(stopIntent)
+            delay(2500)
+            startVpnService(server)
+            isReconnecting = false
+        }
     }
 
     private fun startPollingActiveServer() {

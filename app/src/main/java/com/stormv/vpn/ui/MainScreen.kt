@@ -449,12 +449,61 @@ private fun ConnectCard(
             // Индикатор статуса
             StatusIndicator(state.status)
 
+            // Индикаторы здоровья приложений (только когда подключено)
+            if (state.status == VpnStatus.CONNECTED) {
+                Spacer(modifier = Modifier.height(8.dp))
+                AppHealthRow(state.telegramHealth, state.youtubeHealth)
+            }
+
             // Ошибка
             if (state.status == VpnStatus.ERROR && state.errorMessage != null) {
                 Spacer(modifier = Modifier.height(10.dp))
                 ErrorBox(state.errorMessage)
             }
         }
+    }
+}
+
+@Composable
+private fun AppHealthRow(
+    telegramHealth: AppHealth,
+    youtubeHealth: AppHealth,
+) {
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        AppHealthBadge("Telegram", telegramHealth)
+        Spacer(modifier = Modifier.width(24.dp))
+        AppHealthBadge("YouTube", youtubeHealth)
+    }
+}
+
+@Composable
+private fun AppHealthBadge(name: String, health: AppHealth) {
+    val (dotColor, textColor) = when (health) {
+        AppHealth.UNKNOWN -> SVTextSecondary.copy(alpha = 0.4f) to SVTextSecondary.copy(alpha = 0.4f)
+        AppHealth.OK      -> SVSuccess to SVSuccess
+        AppHealth.DOWN    -> SVError   to SVError
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = when (health) {
+                AppHealth.UNKNOWN -> name
+                AppHealth.OK      -> "$name ✓"
+                AppHealth.DOWN    -> "$name ✗"
+            },
+            fontSize = 12.sp,
+            color = textColor
+        )
     }
 }
 

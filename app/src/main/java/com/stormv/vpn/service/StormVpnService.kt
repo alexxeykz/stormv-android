@@ -37,6 +37,17 @@ class StormVpnService : VpnService() {
         const val CHANNEL_ID   = "stormv_vpn"
         const val NOTIF_ID     = 1
 
+        // Только эти приложения идут через VPN; остальной трафик — напрямую.
+        val ROUTED_APPS = listOf(
+            "org.telegram.messenger",
+            "org.telegram.messenger.web",
+            "org.thunderdog.challegram",
+            "app.nicegram",
+            "com.google.android.youtube",
+            "com.google.android.youtube.tv",
+            "com.google.android.apps.youtube.music"
+        )
+
         var isRunning = false
             private set
         var lastError: String? = null
@@ -88,6 +99,9 @@ class StormVpnService : VpnService() {
                     AppLogger.i("VpnService", "Запуск: ${server.displayName} [${server.protocol}] ${server.host}:${server.port}")
 
                 // ── 1. Создаём TUN интерфейс ──────────────────────────────────
+                // Split tunneling: только Telegram + YouTube идут через VPN.
+                // addAllowedApplication() — режим whitelist: остальные приложения
+                // обходят TUN и выходят напрямую без VPN.
                 val tun = Builder()
                     .setSession("StormV")
                     .addAddress("172.19.0.1", 30)
@@ -98,7 +112,14 @@ class StormVpnService : VpnService() {
                     .addDnsServer("8.8.4.4")
                     .setMtu(8500)
                     .setBlocking(false)
-                    .addDisallowedApplication(packageName)
+
+                for (pkg in ROUTED_APPS) {
+                    try {
+                        tun.addAllowedApplication(pkg)
+                    } catch (e: Exception) {
+                        AppLogger.w("VpnService", "Пакет не установлен, пропущен: $pkg")
+                    }
+                }
 
                 tunPfd = tun.establish() ?: throw Exception("Не удалось создать TUN интерфейс")
                 val tunFd = tunPfd!!.fd
@@ -160,8 +181,8 @@ class StormVpnService : VpnService() {
                 isRunning = true
                 lastError = null
                 onStatusChanged?.invoke(true, null)
-                updateNotification("Подключено")
-                AppLogger.i("VpnService", "VPN активен: ${server.host}:${server.port}")
+                updateNotification("Telegram · YouTube защищены")
+                AppLogger.i("VpnService", "VPN активен (split): ${server.host}:${server.port}")
 
                 // Мониторим tun2socks через polling с delay() — единственный способ
                 // сделать блок отменяемым. waitpid() блокирует JNI-поток навсегда и
