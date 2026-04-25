@@ -1,6 +1,8 @@
 package com.stormv.vpn.util
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import com.stormv.vpn.model.Protocol
 import com.stormv.vpn.model.ServerConfig
 
@@ -8,79 +10,114 @@ import com.stormv.vpn.model.ServerConfig
  * Генерирует sing-box JSON конфиг для всех 7 протоколов.
  * Архитектура: sing-box как mixed (SOCKS5+HTTP) прокси на 127.0.0.1:2080.
  * TUN fd → tun2socks → sing-box:2080 → VPN сервер.
+ *
+ * Маршрутизация (split tunneling по доменам):
+ *   Telegram + YouTube домены + IP + пользовательские сайты → proxy
+ *   Всё остальное → direct (браузер идёт в интернет напрямую)
  */
 object ConfigBuilder {
 
     const val PROXY_PORT = 2080
+    const val CLASH_API_PORT = 9090
 
     private val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
-    const val CLASH_API_PORT = 9090
+    // Telegram: домены (TLS SNI) + основные IP диапазонов DC
+    private val TELEGRAM_DOMAINS = listOf(
+        "telegram.org", "telegram.me", "t.me", "telegra.ph",
+        "tdesktop.com", "api.telegram.org", "core.telegram.org", "cdn.telegram.org"
+    )
+    private val TELEGRAM_IP_CIDRS = listOf(
+        "149.154.160.0/20",   // DC1–5
+        "91.108.4.0/22",      // DC1, DC3
+        "91.108.8.0/22",      // DC3, DC5
+        "91.108.16.0/22",     // DC4
+        "91.108.56.0/22"      // DC3
+    )
 
-    fun buildAuto(serverOutbounds: List<Any>): String {
+    // YouTube / Google Video
+    private val YOUTUBE_DOMAINS = listOf(
+        "youtube.com", "youtu.be", "googlevideo.com",
+        "ytimg.com", "yt3.ggpht.com", "youtube.googleapis.com"
+    )
+
+    private val LOCAL_IP_CIDRS = listOf(
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
+    )
+
+    // Строит список правил маршрутизации с поддержкой пользовательских доменов.
+    // proxyTag — "auto" для urltest-режима, "proxy" для одиночного сервера.
+    private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
+        val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
+        return listOf(
+            // Telegram + YouTube домены и пользовательские сайты → VPN
+            mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
+            // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
+            mapOf("ip_cidr" to TELEGRAM_IP_CIDRS, "outbound" to proxyTag),
+            // Локальные сети → напрямую
+            mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct")
+        )
+    }
+
+    private fun buildMixedInbound() = mapOf(
+        "type" to "mixed",
+        "tag" to "mixed-in",
+        "listen" to "127.0.0.1",
+        "listen_port" to PROXY_PORT,
+        "sniff" to true,
+        "sniff_override_destination" to false
+    )
+
+    // ── Auto (urltest) режим ──────────────────────────────────────────────────
+
+    fun buildAuto(serverOutbounds: List<Any>, userVpnSites: List<String> = emptyList()): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "experimental" to mapOf(
-                "clash_api" to mapOf(
-                    "external_controller" to "127.0.0.1:$CLASH_API_PORT"
-                )
+                "clash_api" to mapOf("external_controller" to "127.0.0.1:$CLASH_API_PORT")
             ),
-            "inbounds" to listOf(
-                mapOf(
-                    "type" to "mixed",
-                    "tag" to "mixed-in",
-                    "listen" to "127.0.0.1",
-                    "listen_port" to PROXY_PORT,
-                    "sniff" to true,
-                    "sniff_override_destination" to false
-                )
-            ),
+            "inbounds" to listOf(buildMixedInbound()),
             "outbounds" to serverOutbounds,
             "route" to mapOf(
-                "rules" to listOf(
-                    mapOf(
-                        "ip_cidr" to listOf(
-                            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-                            "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
-                        ),
-                        "outbound" to "direct"
-                    )
-                ),
-                "final" to "auto"
+                "rules" to buildRoutingRules("auto", userVpnSites),
+                "final" to "direct"
             )
         )
         return gson.toJson(config)
     }
 
-    fun build(server: ServerConfig): String {
+    /**
+     * Перестраивает хранящийся singboxConfig с актуальными пользовательскими сайтами.
+     * Вызывается при каждом старте VPN, чтобы подхватить изменения в настройках.
+     */
+    fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>): String {
+        return try {
+            val stored = JsonParser.parseString(storedJson).asJsonObject
+            val outboundsJson = stored.getAsJsonArray("outbounds")
+            val type = object : TypeToken<List<Any>>() {}.type
+            val outboundsList: List<Any> = gson.fromJson(outboundsJson, type)
+            buildAuto(outboundsList, userVpnSites)
+        } catch (e: Exception) {
+            AppLogger.w("ConfigBuilder", "applyRoutingPolicy fallback: ${e.message}")
+            storedJson
+        }
+    }
+
+    // ── Одиночный сервер ──────────────────────────────────────────────────────
+
+    fun build(server: ServerConfig, userVpnSites: List<String> = emptyList()): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
-            "inbounds" to listOf(
-                mapOf(
-                    "type" to "mixed",
-                    "tag" to "mixed-in",
-                    "listen" to "127.0.0.1",
-                    "listen_port" to PROXY_PORT,
-                    "sniff" to true,
-                    "sniff_override_destination" to false
-                )
-            ),
+            "inbounds" to listOf(buildMixedInbound()),
             "outbounds" to listOf(
                 buildOutbound(server),
                 mapOf("type" to "direct", "tag" to "direct"),
-                mapOf("type" to "block", "tag" to "block")
+                mapOf("type" to "block",  "tag" to "block")
             ),
             "route" to mapOf(
-                "rules" to listOf(
-                    mapOf(
-                        "ip_cidr" to listOf(
-                            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-                            "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
-                        ),
-                        "outbound" to "direct"
-                    )
-                ),
-                "final" to "proxy"
+                "rules" to buildRoutingRules("proxy", userVpnSites),
+                "final" to "direct"
             )
         )
         return gson.toJson(config)

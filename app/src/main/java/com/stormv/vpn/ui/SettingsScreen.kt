@@ -30,6 +30,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var bypassText by remember {
         mutableStateOf(SettingsRepository.bypassList.joinToString("\n"))
     }
+    var vpnSitesText by remember {
+        mutableStateOf(SettingsRepository.vpnSites.joinToString("\n"))
+    }
 
     Column(
         modifier = Modifier
@@ -59,6 +62,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 dnsPrimary = "8.8.8.8"
                 dnsSecondary = "8.8.4.4"
                 autoConnect = false
+                vpnSitesText = ""
                 bypassText = "192.168.0.0/16\n10.0.0.0/8\n172.16.0.0/12"
             }) {
                 Icon(Icons.Filled.RestartAlt, contentDescription = "Сбросить", tint = SVTextSecondary)
@@ -126,6 +130,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
 
+            // ── Сайты через VPN ──────────────────────────────────────────────
+            SettingsCard(title = "Сайты через VPN (в браузере)") {
+                Text(
+                    "Домены, которые браузер будет открывать через VPN.",
+                    fontSize = 12.sp,
+                    color = SVTextSecondary,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+                Text(
+                    "Один домен на строку, без https://  Пример: instagram.com",
+                    fontSize = 11.sp,
+                    color = SVTextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                OutlinedTextField(
+                    value = vpnSitesText,
+                    onValueChange = { vpnSitesText = it },
+                    colors = svTextFieldColors(),
+                    textStyle = LocalTextStyle.current.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp
+                    ),
+                    placeholder = {
+                        Text(
+                            "instagram.com\nfacebook.com\ntwitter.com",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = SVTextSecondary.copy(alpha = 0.3f)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                )
+            }
+
             // ── Bypass ────────────────────────────────────────────────────────
             SettingsCard(title = "Bypass — не через VPN") {
                 Text(
@@ -157,6 +197,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsRepository.dnsPrimary = dnsPrimary.trim()
                 SettingsRepository.dnsSecondary = dnsSecondary.trim()
                 SettingsRepository.autoConnectOnStart = autoConnect
+                SettingsRepository.vpnSites = vpnSitesText
+                    .split("\n")
+                    .map { it.trim()
+                        .removePrefix("https://")
+                        .removePrefix("http://")
+                        .trimEnd('/')
+                    }
+                    .filter { it.isNotBlank() }
                 SettingsRepository.bypassList = bypassText
                     .split("\n")
                     .map { it.trim() }

@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import com.stormv.vpn.MainActivity
 import com.stormv.vpn.R
+import com.stormv.vpn.data.SettingsRepository
 import com.stormv.vpn.model.ServerConfig
 import com.stormv.vpn.util.AppLogger
 import com.stormv.vpn.util.ConfigBuilder
@@ -37,15 +38,28 @@ class StormVpnService : VpnService() {
         const val CHANNEL_ID   = "stormv_vpn"
         const val NOTIF_ID     = 1
 
-        // Только эти приложения идут через VPN; остальной трафик — напрямую.
+        // Приложения, чей трафик идёт через TUN (split tunneling, whitelist-режим).
+        // Telegram + YouTube: весь трафик через VPN.
+        // Браузеры: только домены из списка "Сайты через VPN" — через VPN,
+        //           остальные сайты — напрямую (маршрутизация в sing-box).
         val ROUTED_APPS = listOf(
+            // Telegram
             "org.telegram.messenger",
             "org.telegram.messenger.web",
             "org.thunderdog.challegram",
             "app.nicegram",
+            // YouTube
             "com.google.android.youtube",
             "com.google.android.youtube.tv",
-            "com.google.android.apps.youtube.music"
+            "com.google.android.apps.youtube.music",
+            // Браузеры
+            "com.android.chrome",
+            "org.mozilla.firefox",
+            "com.brave.browser",
+            "com.opera.browser",
+            "com.microsoft.emmx",
+            "com.sec.android.app.sbrowser",
+            "com.yandex.browser"
         )
 
         var isRunning = false
@@ -135,8 +149,10 @@ class StormVpnService : VpnService() {
 
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
+                val userVpnSites = SettingsRepository.vpnSites
                 configFile.writeText(
-                    if (server.isAuto) server.singboxConfig else ConfigBuilder.build(server)
+                    if (server.isAuto) ConfigBuilder.applyRoutingPolicy(server.singboxConfig, userVpnSites)
+                    else ConfigBuilder.build(server, userVpnSites)
                 )
 
                 AppLogger.i("VpnService", "Запуск sing-box SOCKS5 на :${ConfigBuilder.PROXY_PORT}")

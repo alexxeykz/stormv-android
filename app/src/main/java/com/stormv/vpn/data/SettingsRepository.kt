@@ -25,4 +25,11 @@ object SettingsRepository {
     var lastServerId: String
         get() = kv.decodeString("last_server_id", "") ?: ""
         set(v) { kv.encode("last_server_id", v) }
+
+    // Домены, которые пользователь хочет открывать через VPN в браузере.
+    // Хранятся как строки domain_suffix (без https://).
+    var vpnSites: List<String>
+        get() = (kv.decodeString("vpn_sites", "") ?: "")
+            .split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        set(v) { kv.encode("vpn_sites", v.joinToString("\n")) }
 }
