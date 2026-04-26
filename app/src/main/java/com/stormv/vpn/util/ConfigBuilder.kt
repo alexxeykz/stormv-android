@@ -94,6 +94,7 @@ object ConfigBuilder {
     fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>): String {
         return try {
             // Заменяем только route — outbounds не трогаем (без риска Double вместо Int)
+            val config = JsonParser.parseString(storedJson).asJsonObject
             val routeObj = com.google.gson.JsonObject()
             routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites)))
             routeObj.addProperty("final", "direct")
