@@ -51,8 +51,6 @@ object ConfigBuilder {
     private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
         return listOf(
-            // sing-box 1.11+: sniff перенесён из inbound в route rule action
-            mapOf("action" to "sniff"),
             // Telegram + YouTube домены и пользовательские сайты → VPN
             mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
             // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
