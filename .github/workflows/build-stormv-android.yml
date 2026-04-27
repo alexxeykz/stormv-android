@@ -4,6 +4,15 @@ on:
   push:
     branches: [ master ]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Тип релиза'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - test
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -26,11 +35,25 @@ jobs:
         id: version
         run: |
           DATE=$(date +"%Y.%m.%d")
-          CODE=$(date +"%Y%m%d")
-          echo "VERSION=$DATE" >> $GITHUB_OUTPUT
-          echo "CODE=$CODE"    >> $GITHUB_OUTPUT
-          echo "TAG=v$DATE"    >> $GITHUB_OUTPUT
-          echo "Version: $DATE (code $CODE)"
+          RUN=${{ github.run_number }}
+          TAG="v${DATE}-${RUN}"
+          echo "VERSION=$DATE"    >> $GITHUB_OUTPUT
+          echo "CODE=$RUN"        >> $GITHUB_OUTPUT
+          echo "TAG=$TAG"         >> $GITHUB_OUTPUT
+          echo "Version: $DATE build $RUN (tag $TAG)"
+
+      - name: Determine release type
+        id: release_type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.release_type }}" = "stable" ]; then
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+            echo "MAKE_LATEST=true"   >> $GITHUB_OUTPUT
+            echo "LABEL=Стабильная"   >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+            echo "MAKE_LATEST=false"  >> $GITHUB_OUTPUT
+            echo "LABEL=Тестовая"     >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4.7.0
@@ -89,33 +112,34 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
         env:
-          SIGNING_KEY_ALIAS:     ${{ secrets.KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD:  ${{ secrets.KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
           SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          BUILD_VERSION_NAME:    ${{ steps.version.outputs.VERSION }}
-          BUILD_VERSION_CODE:    ${{ steps.version.outputs.CODE }}
+          BUILD_VERSION_NAME:     ${{ steps.version.outputs.VERSION }}
+          BUILD_VERSION_CODE:     ${{ steps.version.outputs.CODE }}
 
       - name: Rename APK
         run: |
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          cp "$APK" "StormV-${{ steps.version.outputs.VERSION }}.apk"
+          cp "$APK" "StormV-${{ steps.version.outputs.VERSION }}-b${{ steps.version.outputs.CODE }}.apk"
           cp "$APK" "StormV.apk"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4.6.2
         with:
           name: StormV-release
-          path: StormV-${{ steps.version.outputs.VERSION }}.apk
+          path: StormV-${{ steps.version.outputs.VERSION }}-b${{ steps.version.outputs.CODE }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name:    ${{ steps.version.outputs.TAG }}
-          name:        "StormV Android ${{ steps.version.outputs.VERSION }}"
-          body:        "Автоматическая сборка от ${{ steps.version.outputs.VERSION }}"
+          tag_name:   ${{ steps.version.outputs.TAG }}
+          name:       "StormV Android ${{ steps.version.outputs.VERSION }} (b${{ steps.version.outputs.CODE }}) — ${{ steps.release_type.outputs.LABEL }}"
+          body:       "${{ steps.release_type.outputs.LABEL }} сборка от ${{ steps.version.outputs.VERSION }}, build ${{ steps.version.outputs.CODE }}"
+          prerelease: ${{ steps.release_type.outputs.IS_PRERELEASE }}
+          make_latest: ${{ steps.release_type.outputs.MAKE_LATEST }}
           files: |
-            StormV-${{ steps.version.outputs.VERSION }}.apk
+            StormV-${{ steps.version.outputs.VERSION }}-b${{ steps.version.outputs.CODE }}.apk
             StormV.apk
-          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

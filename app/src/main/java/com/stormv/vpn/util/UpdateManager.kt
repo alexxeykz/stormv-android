@@ -40,10 +40,10 @@ object UpdateManager {
             )
 
             val tagName = json["tag_name"] as? String ?: return@runCatching null
-            // Tag format: "v2026.04.25" → versionName "2026.04.25"
-            val versionName = tagName.trimStart('v')
-            // versionCode = digits only: "2026.04.25" → 20260425
-            val versionCode = versionName.replace(".", "").toIntOrNull() ?: 0
+            // Tag format: "v2026.04.27-1247" → versionName "2026.04.27", versionCode 1247
+            val withoutV = tagName.trimStart('v')
+            val versionName = withoutV.substringBefore("-")
+            val versionCode = withoutV.substringAfterLast("-").toIntOrNull() ?: 0
 
             if (versionCode <= BuildConfig.VERSION_CODE) return@runCatching null
 
