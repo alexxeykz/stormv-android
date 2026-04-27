@@ -52,6 +52,8 @@ object ConfigBuilder {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
         return listOf(
             mapOf("action" to "sniff"),
+            // IPv6 — серверы не поддерживают, блокируем чтобы приложения быстро фоллбечились на IPv4
+            mapOf("ip_version" to 6, "outbound" to "block"),
             // Telegram + YouTube домены и пользовательские сайты → VPN
             mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
             // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
