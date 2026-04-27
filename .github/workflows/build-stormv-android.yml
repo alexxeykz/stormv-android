@@ -99,6 +99,7 @@ jobs:
         run: |
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
           cp "$APK" "StormV-${{ steps.version.outputs.VERSION }}.apk"
+          cp "$APK" "StormV.apk"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4.6.2
@@ -112,7 +113,9 @@ jobs:
           tag_name:    ${{ steps.version.outputs.TAG }}
           name:        "StormV Android ${{ steps.version.outputs.VERSION }}"
           body:        "Автоматическая сборка от ${{ steps.version.outputs.VERSION }}"
-          files:       StormV-${{ steps.version.outputs.VERSION }}.apk
+          files: |
+            StormV-${{ steps.version.outputs.VERSION }}.apk
+            StormV.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

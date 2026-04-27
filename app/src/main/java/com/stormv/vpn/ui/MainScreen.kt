@@ -466,11 +466,14 @@ private fun ConnectCard(
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Выбранный сервер
+            // Сервер: когда подключено показываем актуальный (urltest), иначе — выбранный
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text("Сервер: ", fontSize = 13.sp, color = SVTextSecondary)
                 Text(
-                    text = state.selectedServer?.displayName ?: "Не выбран",
+                    text = when {
+                        state.status == VpnStatus.CONNECTED && state.activeServerTag != null -> state.activeServerTag
+                        else -> state.selectedServer?.displayName ?: "Не выбран"
+                    },
                     fontSize = 13.sp,
                     color = SVTextPrimary,
                     maxLines = 1,
