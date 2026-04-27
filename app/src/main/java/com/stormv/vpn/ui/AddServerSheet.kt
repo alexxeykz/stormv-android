@@ -214,7 +214,8 @@ private fun SubscriptionTab(
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(
             onClick = {
-                val text = clipboard.getText()?.text?.trim() ?: ""
+                val text = clipboard.getText()?.text?.trim()
+                    ?.lines()?.firstOrNull { it.isNotBlank() } ?: ""
                 if (text.isNotEmpty()) { url = text; error = "" }
             },
             shape = RoundedCornerShape(12.dp),

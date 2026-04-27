@@ -13,10 +13,11 @@ import java.net.URL
 object SubscriptionManager {
 
     suspend fun fetch(url: String): Result<List<ServerConfig>> {
+        val cleanUrl = url.trim().lines().firstOrNull { it.isNotBlank() } ?: url.trim()
         var last: Result<List<ServerConfig>> = Result.failure(Exception())
         repeat(3) { i ->
             if (i > 0) kotlinx.coroutines.delay(1500)
-            last = fetchOnce(url)
+            last = fetchOnce(cleanUrl)
             if (last.isSuccess) return last
         }
         return last
