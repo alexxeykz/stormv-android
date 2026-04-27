@@ -51,6 +51,7 @@ object ConfigBuilder {
     private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
         return listOf(
+            mapOf("action" to "sniff"),
             // Telegram + YouTube домены и пользовательские сайты → VPN
             mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
             // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
@@ -64,9 +65,7 @@ object ConfigBuilder {
         "type" to "mixed",
         "tag" to "mixed-in",
         "listen" to "127.0.0.1",
-        "listen_port" to PROXY_PORT,
-        "sniff" to true,
-        "sniff_override_destination" to true
+        "listen_port" to PROXY_PORT
     )
 
     // ── Auto (urltest) режим ──────────────────────────────────────────────────
