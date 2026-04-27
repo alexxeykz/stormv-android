@@ -12,7 +12,17 @@ import java.net.URL
 
 object SubscriptionManager {
 
-    suspend fun fetch(subscriptionUrl: String): Result<List<ServerConfig>> = withContext(Dispatchers.IO) {
+    suspend fun fetch(url: String): Result<List<ServerConfig>> {
+        var last: Result<List<ServerConfig>> = Result.failure(Exception())
+        repeat(3) { i ->
+            if (i > 0) kotlinx.coroutines.delay(1500)
+            last = fetchOnce(url)
+            if (last.isSuccess) return last
+        }
+        return last
+    }
+
+    private suspend fun fetchOnce(subscriptionUrl: String): Result<List<ServerConfig>> = withContext(Dispatchers.IO) {
         runCatching {
             val connection = URL(subscriptionUrl).openConnection() as HttpURLConnection
             connection.setRequestProperty("User-Agent", "StormV/1.0 sing-box")
