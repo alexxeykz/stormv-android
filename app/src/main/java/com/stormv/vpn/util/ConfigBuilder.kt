@@ -41,6 +41,10 @@ object ConfigBuilder {
         "ytimg.com", "yt3.ggpht.com", "youtube.googleapis.com"
     )
 
+    private val CLAUDE_DOMAINS = listOf(
+        "claude.com", "claude.ai", "anthropic.com"
+    )
+
     private val LOCAL_IP_CIDRS = listOf(
         "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
         "127.0.0.0/8", "169.254.0.0/16", "fc00::/7"
@@ -49,7 +53,7 @@ object ConfigBuilder {
     // Строит список правил маршрутизации с поддержкой пользовательских доменов.
     // proxyTag — "auto" для urltest-режима, "proxy" для одиночного сервера.
     private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
-        val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + userVpnSites
+        val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + CLAUDE_DOMAINS + userVpnSites
         return listOf(
             mapOf("action" to "sniff"),
             // Telegram + YouTube домены и пользовательские сайты → VPN
