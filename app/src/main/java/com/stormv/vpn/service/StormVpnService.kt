@@ -150,10 +150,23 @@ class StormVpnService : VpnService() {
                 val configDir = File(filesDir, "singbox").also { it.mkdirs() }
                 val configFile = File(configDir, "config.json")
                 val userVpnSites = SettingsRepository.vpnSites
-                configFile.writeText(
-                    if (server.isAuto) ConfigBuilder.applyRoutingPolicy(server.singboxConfig, userVpnSites)
-                    else ConfigBuilder.build(server, userVpnSites)
-                )
+
+                // Пишем конфиг с action:sniff (требует sing-box >= 1.11).
+                // Проверяем через 'check'. Если бинарь старый — пересобираем без sniff.
+                fun buildConfig(sniff: Boolean) =
+                    if (server.isAuto) ConfigBuilder.applyRoutingPolicy(server.singboxConfig, userVpnSites, sniff)
+                    else ConfigBuilder.build(server, userVpnSites, sniff)
+
+                configFile.writeText(buildConfig(sniff = true))
+                val configError = validateSingBoxConfig(singBoxFile, configFile)
+                if (configError != null) {
+                    if (configError.contains("unknown field", ignoreCase = true)) {
+                        AppLogger.w("VpnService", "Old sing-box: action:sniff не поддерживается, отключаем")
+                        configFile.writeText(buildConfig(sniff = false))
+                    } else {
+                        throw Exception("Ошибка конфига sing-box:\n$configError")
+                    }
+                }
 
                 AppLogger.i("VpnService", "Запуск sing-box SOCKS5 на :${ConfigBuilder.PROXY_PORT}")
                 singBoxProcess = ProcessBuilder(singBoxFile.absolutePath, "run", "-c", configFile.absolutePath)
@@ -224,6 +237,19 @@ class StormVpnService : VpnService() {
                 // через мёртвый VPN и интернет "не работает" даже при статусе "отключено".
                 stopVpn()
             }
+        }
+    }
+
+    private fun validateSingBoxConfig(binary: File, config: File): String? {
+        return try {
+            val proc = ProcessBuilder(binary.absolutePath, "check", "-c", config.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            val output = proc.inputStream.bufferedReader().readText().trim()
+            proc.waitFor(10, TimeUnit.SECONDS)
+            if (proc.exitValue() == 0) null else output.ifEmpty { "invalid config" }
+        } catch (_: Exception) {
+            null // если 'check' сам упал — продолжаем, ошибка проявится при запуске
         }
     }
 

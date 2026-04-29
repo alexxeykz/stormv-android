@@ -52,17 +52,18 @@ object ConfigBuilder {
 
     // Строит список правил маршрутизации с поддержкой пользовательских доменов.
     // proxyTag — "auto" для urltest-режима, "proxy" для одиночного сервера.
-    private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>): List<Map<String, Any>> {
+    // sniff=false для sing-box < 1.11, которые не поддерживают action:sniff.
+    private fun buildRoutingRules(proxyTag: String, userVpnSites: List<String>, sniff: Boolean = true): List<Map<String, Any>> {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + CLAUDE_DOMAINS + userVpnSites
-        return listOf(
-            mapOf("action" to "sniff"),
-            // Telegram + YouTube домены и пользовательские сайты → VPN
-            mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag),
-            // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
-            mapOf("ip_cidr" to TELEGRAM_IP_CIDRS, "outbound" to proxyTag),
-            // Локальные сети → напрямую
-            mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct")
-        )
+        val rules = mutableListOf<Map<String, Any>>()
+        if (sniff) rules.add(mapOf("action" to "sniff"))
+        // Telegram + YouTube домены и пользовательские сайты → VPN
+        rules.add(mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag))
+        // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
+        rules.add(mapOf("ip_cidr" to TELEGRAM_IP_CIDRS, "outbound" to proxyTag))
+        // Локальные сети → напрямую
+        rules.add(mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct"))
+        return rules
     }
 
     private fun buildMixedInbound() = mapOf(
@@ -74,7 +75,7 @@ object ConfigBuilder {
 
     // ── Auto (urltest) режим ──────────────────────────────────────────────────
 
-    fun buildAuto(serverOutbounds: List<Any>, userVpnSites: List<String> = emptyList()): String {
+    fun buildAuto(serverOutbounds: List<Any>, userVpnSites: List<String> = emptyList(), sniff: Boolean = true): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "experimental" to mapOf(
@@ -83,7 +84,7 @@ object ConfigBuilder {
             "inbounds" to listOf(buildMixedInbound()),
             "outbounds" to serverOutbounds,
             "route" to mapOf(
-                "rules" to buildRoutingRules("auto", userVpnSites),
+                "rules" to buildRoutingRules("auto", userVpnSites, sniff),
                 "final" to "auto"
             )
         )
@@ -94,12 +95,12 @@ object ConfigBuilder {
      * Обновляет route-секцию хранящегося singboxConfig с актуальными пользовательскими сайтами.
      * Не трогает outbounds — числа остаются числами, никакой конвертации типов Gson.
      */
-    fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>): String {
+    fun applyRoutingPolicy(storedJson: String, userVpnSites: List<String>, sniff: Boolean = true): String {
         return try {
             // Заменяем только route — outbounds не трогаем (без риска Double вместо Int)
             val config = JsonParser.parseString(storedJson).asJsonObject
             val routeObj = com.google.gson.JsonObject()
-            routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites)))
+            routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites, sniff)))
             routeObj.addProperty("final", "auto")
             config.add("route", routeObj)
 
@@ -123,7 +124,7 @@ object ConfigBuilder {
 
     // ── Одиночный сервер ──────────────────────────────────────────────────────
 
-    fun build(server: ServerConfig, userVpnSites: List<String> = emptyList()): String {
+    fun build(server: ServerConfig, userVpnSites: List<String> = emptyList(), sniff: Boolean = true): String {
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "inbounds" to listOf(buildMixedInbound()),
@@ -133,7 +134,7 @@ object ConfigBuilder {
                 mapOf("type" to "block",  "tag" to "block")
             ),
             "route" to mapOf(
-                "rules" to buildRoutingRules("proxy", userVpnSites),
+                "rules" to buildRoutingRules("proxy", userVpnSites, sniff),
                 "final" to "proxy"
             )
         )
