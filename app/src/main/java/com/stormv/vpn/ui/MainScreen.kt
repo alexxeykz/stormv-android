@@ -278,17 +278,19 @@ private fun ServerListCard(
                     modifier = Modifier.weight(1f)
                 )
                 if (onRefresh != null) {
-                    val refreshAngle by rememberInfiniteTransition(label = "refresh").animateFloat(
-                        initialValue = 0f, targetValue = if (isRefreshing) 360f else 0f,
-                        animationSpec = if (isRefreshing) infiniteRepeatable(tween(800, easing = LinearEasing))
-                                        else snap(), label = "angle"
+                    val infiniteTransition = rememberInfiniteTransition(label = "refresh")
+                    val rotationAngle by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing)),
+                        label = "angle"
                     )
                     IconButton(onClick = onRefresh, enabled = !isRefreshing) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Обновить подписку",
                             tint = if (isRefreshing) SVYellow else SVPurple,
-                            modifier = Modifier.rotate(refreshAngle)
+                            modifier = Modifier.rotate(if (isRefreshing) rotationAngle else 0f)
                         )
                     }
                 }
