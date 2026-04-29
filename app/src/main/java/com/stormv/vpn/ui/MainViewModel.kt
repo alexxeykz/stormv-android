@@ -179,7 +179,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun applySubscriptionServers(servers: List<com.stormv.vpn.model.ServerConfig>) {
         val autoServer = servers.firstOrNull { it.isAuto }
-        val manual = ServerRepository.loadAll().filter { !it.isAuto && !it.isSubscription }
+        val newSubTags = servers.filter { !it.isAuto }.map { it.displayName }.toSet()
+        // Оставляем только ручные серверы, которых нет в новой подписке (по имени)
+        val manual = ServerRepository.loadAll()
+            .filter { !it.isAuto && !it.isSubscription && it.displayName !in newSubTags }
         val newList = if (autoServer != null) {
             listOf(autoServer) + servers.filter { !it.isAuto } + manual
         } else {
