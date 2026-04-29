@@ -32,4 +32,8 @@ object SettingsRepository {
         get() = (kv.decodeString("vpn_sites", "") ?: "")
             .split("\n").map { it.trim() }.filter { it.isNotBlank() }
         set(v) { kv.encode("vpn_sites", v.joinToString("\n")) }
+
+    var subscriptionUrl: String
+        get() = kv.decodeString("subscription_url", "") ?: ""
+        set(v) { kv.encode("subscription_url", v) }
 }

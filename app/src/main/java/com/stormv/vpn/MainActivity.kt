@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                         onSelectServer = { vm.selectServer(it) },
                         onRemoveServer = { vm.removeServer(it) },
                         onAddServer = { showAddSheet = true },
+                        onRefreshSubscription = { vm.refreshSubscription() },
                         onOpenSettings = { showSettings = true },
                         onOpenLogs = { showLogs = true },
                         onDownloadUpdate = { vm.downloadUpdate(this@MainActivity) },

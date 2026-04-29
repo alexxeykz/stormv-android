@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.stormv.vpn.data.ServerRepository
+import com.stormv.vpn.data.SettingsRepository
 import com.stormv.vpn.model.ServerConfig
 import com.stormv.vpn.service.StormVpnService
 import com.stormv.vpn.util.AppLogger
@@ -45,8 +46,10 @@ data class MainUiState(
     val activeServerTag: String? = null,
     val telegramHealth: AppHealth = AppHealth.UNKNOWN,
     val youtubeHealth: AppHealth = AppHealth.UNKNOWN,
-    val updateInfo: UpdateInfo? = null,       // не null = доступна новая версия
-    val updateDownloadProgress: Int = -1,      // -1 = не скачиваем, 0-100 = прогресс
+    val updateInfo: UpdateInfo? = null,
+    val updateDownloadProgress: Int = -1,
+    val isRefreshingSubscription: Boolean = false,
+    val subscriptionUrl: String = "",
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -62,6 +65,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loadServers()
+        _state.value = _state.value.copy(subscriptionUrl = SettingsRepository.subscriptionUrl)
         checkForUpdate()
         StormVpnService.onStatusChanged = { running, error ->
             val newStatus = if (running) VpnStatus.CONNECTED
@@ -143,23 +147,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = SubscriptionManager.fetch(url)
             result.onSuccess { servers ->
-                val autoServer = servers.firstOrNull { it.isAuto }
-                // Keep manual (non-subscription) servers, replace subscription ones
-                val manual = ServerRepository.loadAll().filter { !it.isAuto && !it.isSubscription }
-                val newList = if (autoServer != null) {
-                    listOf(autoServer) + servers.filter { !it.isAuto } + manual
-                } else {
-                    manual + servers
-                }
-                ServerRepository.saveAll(newList)
-                val visible = newList.filter { !it.isAuto }
-                _state.value = _state.value.copy(
-                    servers = visible,
-                    selectedServer = visible.firstOrNull { it.isSubscription }
-                        ?: _state.value.selectedServer
-                        ?: visible.firstOrNull()
-                )
-                val count = autoServer?.serverCount ?: servers.size
+                SettingsRepository.subscriptionUrl = url
+                _state.value = _state.value.copy(subscriptionUrl = url)
+                applySubscriptionServers(servers)
+                val count = servers.firstOrNull { it.isAuto }?.serverCount ?: servers.size
                 AppLogger.i("UI", "Подписка: $count серверов")
                 onResult(count, null)
             }.onFailure { e ->
@@ -167,6 +158,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 onResult(0, e.message)
             }
         }
+    }
+
+    fun refreshSubscription() {
+        val url = SettingsRepository.subscriptionUrl
+        if (url.isBlank()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isRefreshingSubscription = true)
+            val result = SubscriptionManager.fetch(url)
+            result.onSuccess { servers ->
+                applySubscriptionServers(servers)
+                val count = servers.firstOrNull { it.isAuto }?.serverCount ?: servers.size
+                AppLogger.i("UI", "Подписка обновлена: $count серверов")
+            }.onFailure { e ->
+                AppLogger.e("UI", "Ошибка обновления подписки: ${e.message}")
+            }
+            _state.value = _state.value.copy(isRefreshingSubscription = false)
+        }
+    }
+
+    private fun applySubscriptionServers(servers: List<com.stormv.vpn.model.ServerConfig>) {
+        val autoServer = servers.firstOrNull { it.isAuto }
+        val manual = ServerRepository.loadAll().filter { !it.isAuto && !it.isSubscription }
+        val newList = if (autoServer != null) {
+            listOf(autoServer) + servers.filter { !it.isAuto } + manual
+        } else {
+            manual + servers
+        }
+        ServerRepository.saveAll(newList)
+        val visible = newList.filter { !it.isAuto }
+        _state.value = _state.value.copy(
+            servers = visible,
+            selectedServer = visible.firstOrNull { it.isSubscription }
+                ?: _state.value.selectedServer
+                ?: visible.firstOrNull()
+        )
     }
 
     fun removeServer(server: ServerConfig) {

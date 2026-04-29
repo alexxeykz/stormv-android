@@ -41,6 +41,7 @@ fun MainScreen(
     onSelectServer: (ServerConfig) -> Unit,
     onRemoveServer: (ServerConfig) -> Unit,
     onAddServer: () -> Unit,
+    onRefreshSubscription: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
     onDownloadUpdate: () -> Unit = {},
@@ -75,6 +76,8 @@ fun MainScreen(
             onSelect = onSelectServer,
             onRemove = onRemoveServer,
             onAdd = onAddServer,
+            onRefresh = if (state.subscriptionUrl.isNotBlank()) onRefreshSubscription else null,
+            isRefreshing = state.isRefreshingSubscription,
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 16.dp)
@@ -253,6 +256,8 @@ private fun ServerListCard(
     onSelect: (ServerConfig) -> Unit,
     onRemove: (ServerConfig) -> Unit,
     onAdd: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -272,6 +277,21 @@ private fun ServerListCard(
                     color = SVTextSecondary,
                     modifier = Modifier.weight(1f)
                 )
+                if (onRefresh != null) {
+                    val refreshAngle by rememberInfiniteTransition(label = "refresh").animateFloat(
+                        initialValue = 0f, targetValue = if (isRefreshing) 360f else 0f,
+                        animationSpec = if (isRefreshing) infiniteRepeatable(tween(800, easing = LinearEasing))
+                                        else snap(), label = "angle"
+                    )
+                    IconButton(onClick = onRefresh, enabled = !isRefreshing) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Обновить подписку",
+                            tint = if (isRefreshing) SVYellow else SVPurple,
+                            modifier = Modifier.rotate(refreshAngle)
+                        )
+                    }
+                }
                 IconButton(onClick = onAdd) {
                     Icon(
                         imageVector = Icons.Filled.Add,
