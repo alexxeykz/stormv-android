@@ -52,6 +52,11 @@ class StormVpnService : VpnService() {
             "com.google.android.youtube",
             "com.google.android.youtube.tv",
             "com.google.android.apps.youtube.music",
+            // YouTube ReVanced
+            "app.revanced.android.youtube",
+            "app.revanced.android.apps.youtube.music",
+            "app.rvx.android.youtube",
+            "app.rvx.android.apps.youtube.music",
             // Браузеры
             "com.android.chrome",
             "org.mozilla.firefox",
