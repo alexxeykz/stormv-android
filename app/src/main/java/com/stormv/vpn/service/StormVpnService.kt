@@ -109,8 +109,38 @@ class StormVpnService : VpnService() {
     }
 
     private fun startVpn(serverJson: String) {
+        val prevJob = vpnJob
         vpnJob = scope.launch {
             try {
+                // Cancel the previous monitoring loop and wait for it to finish,
+                // then kill any stale processes that still hold port 2080.
+                prevJob?.cancel()
+                prevJob?.join()
+
+                singBoxProcess?.let { old ->
+                    if (old.isAlive) {
+                        AppLogger.i("VpnService", "Завершение предыдущего sing-box перед стартом...")
+                        old.destroyForcibly()
+                        var waited = 0
+                        while (old.isAlive && waited < 5000) {
+                            delay(100)
+                            waited += 100
+                        }
+                        if (old.isAlive) AppLogger.w("VpnService", "sing-box не завершился за 5с")
+                    }
+                }
+                singBoxProcess = null
+
+                if (tun2socksPid > 0) {
+                    NativeUtils.killProcess(tun2socksPid)
+                    tun2socksPid = -1
+                }
+                tun2socksOutPfd?.close()
+                tun2socksOutPfd = null
+                tunPfd?.close()
+                tunPfd = null
+                stopping = false
+
                 val server = com.google.gson.Gson().fromJson(serverJson, ServerConfig::class.java)
                 if (server.isAuto)
                     AppLogger.i("VpnService", "Запуск (Auto): ${server.displayName} [${server.serverCount} серв.]")
