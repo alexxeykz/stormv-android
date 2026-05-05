@@ -41,6 +41,16 @@ object ConfigBuilder {
         "ytimg.com", "yt3.ggpht.com", "youtube.googleapis.com"
     )
 
+    // Google IP-диапазоны для YouTube QUIC/UDP (домен не снифается в UDP)
+    private val YOUTUBE_IP_CIDRS = listOf(
+        "142.250.0.0/15",   // Google
+        "172.217.0.0/16",   // Google
+        "216.58.0.0/15",    // Google
+        "216.239.0.0/18",   // Google CDN
+        "209.85.128.0/17",  // Google
+        "74.125.0.0/16"     // Google
+    )
+
     private val CLAUDE_DOMAINS = listOf(
         "claude.com", "claude.ai", "anthropic.com"
     )
@@ -63,6 +73,8 @@ object ConfigBuilder {
         rules.add(mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag))
         // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
         rules.add(mapOf("ip_cidr" to TELEGRAM_IP_CIDRS, "outbound" to proxyTag))
+        // YouTube Google IP-диапазоны → VPN (QUIC/UDP не снифается по домену)
+        rules.add(mapOf("ip_cidr" to YOUTUBE_IP_CIDRS, "outbound" to proxyTag))
         // Локальные сети → напрямую
         rules.add(mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct"))
         return rules
@@ -87,7 +99,7 @@ object ConfigBuilder {
             "outbounds" to serverOutbounds,
             "route" to mapOf(
                 "rules" to buildRoutingRules("auto", userVpnSites, sniff),
-                "final" to "proxy"
+                "final" to "direct"
             )
         )
         return gson.toJson(config)
@@ -103,7 +115,7 @@ object ConfigBuilder {
             val config = JsonParser.parseString(storedJson).asJsonObject
             val routeObj = com.google.gson.JsonObject()
             routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites, sniff)))
-            routeObj.addProperty("final", "proxy")
+            routeObj.addProperty("final", "direct")
             config.add("route", routeObj)
 
             // Добавляем clash_api если отсутствует
@@ -137,7 +149,7 @@ object ConfigBuilder {
             ),
             "route" to mapOf(
                 "rules" to buildRoutingRules("proxy", userVpnSites, sniff),
-                "final" to "proxy"
+                "final" to "direct"
             )
         )
         return gson.toJson(config)
