@@ -57,6 +57,8 @@ object ConfigBuilder {
         val proxyDomains = TELEGRAM_DOMAINS + YOUTUBE_DOMAINS + CLAUDE_DOMAINS + userVpnSites
         val rules = mutableListOf<Map<String, Any>>()
         if (sniff) rules.add(mapOf("action" to "sniff"))
+        // DNS-серверы → VPN (без этого DNS-ответы могут цензурироваться)
+        rules.add(mapOf("ip_cidr" to listOf("8.8.8.8/32", "8.8.4.4/32", "77.88.8.8/32", "77.88.8.1/32"), "outbound" to proxyTag))
         // Telegram + YouTube домены и пользовательские сайты → VPN
         rules.add(mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag))
         // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
