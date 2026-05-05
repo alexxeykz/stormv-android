@@ -36,4 +36,8 @@ object SettingsRepository {
     var subscriptionUrl: String
         get() = kv.decodeString("subscription_url", "") ?: ""
         set(v) { kv.encode("subscription_url", v) }
+
+    var lastSubscriptionUpdate: Long
+        get() = kv.decodeLong("last_sub_update", 0L)
+        set(v) { kv.encode("last_sub_update", v) }
 }

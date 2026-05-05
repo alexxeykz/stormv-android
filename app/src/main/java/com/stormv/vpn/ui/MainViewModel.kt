@@ -67,6 +67,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadServers()
         _state.value = _state.value.copy(subscriptionUrl = SettingsRepository.subscriptionUrl)
         checkForUpdate()
+        autoRefreshSubscriptionIfNeeded()
         StormVpnService.onStatusChanged = { running, error ->
             val newStatus = if (running) VpnStatus.CONNECTED
                            else if (error != null) VpnStatus.ERROR
@@ -168,12 +169,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = SubscriptionManager.fetch(url)
             result.onSuccess { servers ->
                 applySubscriptionServers(servers)
+                SettingsRepository.lastSubscriptionUpdate = System.currentTimeMillis()
                 val count = servers.firstOrNull { it.isAuto }?.serverCount ?: servers.size
                 AppLogger.i("UI", "Подписка обновлена: $count серверов")
             }.onFailure { e ->
                 AppLogger.e("UI", "Ошибка обновления подписки: ${e.message}")
             }
             _state.value = _state.value.copy(isRefreshingSubscription = false)
+        }
+    }
+
+    private fun autoRefreshSubscriptionIfNeeded() {
+        val url = SettingsRepository.subscriptionUrl
+        if (url.isBlank()) return
+        val elapsed = System.currentTimeMillis() - SettingsRepository.lastSubscriptionUpdate
+        if (elapsed < 12 * 60 * 60 * 1000L) return
+        viewModelScope.launch {
+            val result = SubscriptionManager.fetch(url)
+            result.onSuccess { servers ->
+                applySubscriptionServers(servers)
+                SettingsRepository.lastSubscriptionUpdate = System.currentTimeMillis()
+                AppLogger.i("UI", "Авто-обновление подписки: ${servers.size} серверов")
+            }.onFailure { e ->
+                AppLogger.e("UI", "Авто-обновление подписки не удалось: ${e.message}")
+            }
         }
     }
 
