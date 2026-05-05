@@ -87,7 +87,7 @@ object ConfigBuilder {
             "outbounds" to serverOutbounds,
             "route" to mapOf(
                 "rules" to buildRoutingRules("auto", userVpnSites, sniff),
-                "final" to "direct"
+                "final" to "proxy"
             )
         )
         return gson.toJson(config)
@@ -103,7 +103,7 @@ object ConfigBuilder {
             val config = JsonParser.parseString(storedJson).asJsonObject
             val routeObj = com.google.gson.JsonObject()
             routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites, sniff)))
-            routeObj.addProperty("final", "direct")
+            routeObj.addProperty("final", "proxy")
             config.add("route", routeObj)
 
             // Добавляем clash_api если отсутствует
@@ -137,7 +137,7 @@ object ConfigBuilder {
             ),
             "route" to mapOf(
                 "rules" to buildRoutingRules("proxy", userVpnSites, sniff),
-                "final" to "direct"
+                "final" to "proxy"
             )
         )
         return gson.toJson(config)
