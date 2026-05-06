@@ -73,6 +73,7 @@ class StormVpnService : VpnService() {
             private set
 
         var onStatusChanged: ((Boolean, String?) -> Unit)? = null
+        var onRequestNotificationUpdate: ((String) -> Unit)? = null
     }
 
     private val binder = LocalBinder()
@@ -94,7 +95,9 @@ class StormVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        onRequestNotificationUpdate = { text -> updateNotification(text) }
     }
+
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -328,6 +331,7 @@ class StormVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        onRequestNotificationUpdate = null
         stopVpn()
         super.onDestroy()
     }

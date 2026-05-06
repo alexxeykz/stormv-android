@@ -28,17 +28,26 @@ object ConfigBuilder {
         "tdesktop.com", "api.telegram.org", "core.telegram.org", "cdn.telegram.org"
     )
     private val TELEGRAM_IP_CIDRS = listOf(
-        "149.154.160.0/20",   // DC1–5
+        "149.154.160.0/20",   // DC1–5 (основные)
         "91.108.4.0/22",      // DC1, DC3
         "91.108.8.0/22",      // DC3, DC5
         "91.108.16.0/22",     // DC4
-        "91.108.56.0/22"      // DC3
+        "91.108.20.0/22",     // DC дополнительный
+        "91.108.36.0/23",     // DC дополнительный
+        "91.108.38.0/23",     // DC дополнительный
+        "91.108.56.0/22",     // DC3
+        "95.161.64.0/20"      // Telegram Media Server (медиа-файлы в РФ)
     )
 
     // YouTube / Google Video
+    // googleapis.com: нужен для Google Auth, Fonts API, YouTube Data API
+    // gstatic.com: Google CDN — иконки, шрифты, статика YouTube UI
+    // googleusercontent.com: аватарки каналов, кэшированные изображения
+    // ggpht.com: Google Photos / thumbnails
     private val YOUTUBE_DOMAINS = listOf(
         "youtube.com", "youtu.be", "googlevideo.com",
-        "ytimg.com", "yt3.ggpht.com", "youtube.googleapis.com"
+        "ytimg.com", "ggpht.com", "youtube.googleapis.com",
+        "googleapis.com", "gstatic.com", "googleusercontent.com"
     )
 
     // Google IP-диапазоны для YouTube QUIC/UDP (домен не снифается в UDP)

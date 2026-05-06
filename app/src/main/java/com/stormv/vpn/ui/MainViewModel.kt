@@ -303,7 +303,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     telegramHealth = if (tgOk) AppHealth.OK else AppHealth.DOWN,
                     youtubeHealth  = if (ytOk) AppHealth.OK else AppHealth.DOWN
                 )
+                val tgSign = if (tgOk) "✓" else "✗"
+                val ytSign = if (ytOk) "✓" else "✗"
                 AppLogger.i("Health", "Telegram=$tgOk YouTube=$ytOk")
+                StormVpnService.onRequestNotificationUpdate?.invoke("Telegram $tgSign  YouTube $ytSign")
                 if (!tgOk && !ytOk) {
                     healthFailCount++
                     AppLogger.w("Health", "Telegram+YouTube недоступны (попытка $healthFailCount/2)")
@@ -320,21 +323,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun checkAppHealth(): Pair<Boolean, Boolean> = withContext(Dispatchers.IO) {
-        // Проверяем через SOCKS5 прокси (sing-box), а не напрямую —
-        // так проверяется именно доступность через VPN сервер.
+        // Проверяем через SOCKS5 прокси (sing-box) с реальной загрузкой данных —
+        // HEAD только проверяет TCP+TLS handshake, но видео/сообщения могут не идти.
+        // GET с чтением тела доказывает что VPN реально передаёт контент.
         val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ConfigBuilder.PROXY_PORT))
-        fun testUrl(urlStr: String): Boolean = runCatching {
+
+        fun testWithData(urlStr: String, minBytes: Int = 256): Boolean = runCatching {
             val conn = URL(urlStr).openConnection(proxy) as HttpURLConnection
-            conn.connectTimeout = 6000
-            conn.readTimeout   = 6000
-            conn.requestMethod = "HEAD"
+            conn.connectTimeout = 5000
+            conn.readTimeout = 10_000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             conn.instanceFollowRedirects = false
             val code = conn.responseCode
+            if (code !in 200..499) return@runCatching false
+            var totalRead = 0
+            val buf = ByteArray(4096)
+            val stream = conn.inputStream
+            while (totalRead < minBytes * 2) {
+                val n = stream.read(buf)
+                if (n < 0) break
+                totalRead += n
+            }
             conn.disconnect()
-            code in 200..499
+            totalRead >= minBytes
         }.getOrElse { false }
-        val tgOk = testUrl("https://api.telegram.org")
-        val ytOk = testUrl("https://www.youtube.com")
+
+        // Telegram: favicon.ico (~1.5 KB PNG) — реальная передача бинарных данных
+        val tgOk = testWithData("https://telegram.org/favicon.ico")
+        // YouTube: миниатюра видео (~5 KB JPEG) — реальный медиаконтент
+        val ytOk = testWithData("https://i.ytimg.com/vi/dQw4w9WgXcQ/default.jpg")
         tgOk to ytOk
     }
 
