@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.stormv.vpn.BuildConfig
 import com.stormv.vpn.data.SettingsRepository
 import com.stormv.vpn.ui.theme.*
 
@@ -186,6 +187,37 @@ fun SettingsScreen(onBack: () -> Unit) {
                         .fillMaxWidth()
                         .height(140.dp)
                 )
+            }
+
+            // ── О программе ──────────────────────────────────────────────────
+            SettingsCard(title = "О программе") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Версия", fontSize = 14.sp, color = SVTextPrimary)
+                    Text(
+                        text = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+                        fontSize = 14.sp,
+                        color = SVTextSecondary,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Репозиторий", fontSize = 14.sp, color = SVTextPrimary)
+                    Text(
+                        text = "alexxeykz/stormv-android",
+                        fontSize = 13.sp,
+                        color = SVTextSecondary,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
