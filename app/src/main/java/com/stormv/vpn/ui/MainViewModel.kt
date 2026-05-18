@@ -135,7 +135,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun addServerFromUrl(url: String): Boolean {
         val server = UrlParser.parse(url) ?: return false
         ServerRepository.add(server)
-        val updated = ServerRepository.loadAll().filter { !it.isAuto }
+        val updated = ServerRepository.loadAll()
+            .sortedWith(compareByDescending<ServerConfig> { it.isAuto }.thenBy { it.name })
         _state.value = _state.value.copy(
             servers = updated,
             selectedServer = _state.value.selectedServer ?: server
