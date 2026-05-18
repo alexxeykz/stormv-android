@@ -52,12 +52,19 @@ object ConfigBuilder {
 
     // Google IP-диапазоны для YouTube QUIC/UDP (домен не снифается в UDP)
     private val YOUTUBE_IP_CIDRS = listOf(
-        "142.250.0.0/15",   // Google
+        "142.250.0.0/15",   // Google (основной YouTube CDN)
         "172.217.0.0/16",   // Google
         "216.58.0.0/15",    // Google
         "216.239.0.0/18",   // Google CDN
         "209.85.128.0/17",  // Google
-        "74.125.0.0/16"     // Google
+        "74.125.0.0/16",    // Google
+        "64.233.160.0/19",  // Google (GFE)
+        "66.102.0.0/20",    // Google
+        "108.177.8.0/21",   // Google (YouTube infra)
+        "108.177.96.0/19",  // Google
+        "35.190.0.0/17",    // Google Cloud CDN
+        "34.96.0.0/20",     // Google Cloud
+        "34.104.0.0/22"     // Google Cloud
     )
 
     private val CLAUDE_DOMAINS = listOf(
@@ -99,15 +106,27 @@ object ConfigBuilder {
     // ── Auto (urltest) режим ──────────────────────────────────────────────────
 
     fun buildAuto(serverOutbounds: List<Any>, userVpnSites: List<String> = emptyList(), sniff: Boolean = true): String {
+        // Определяем реальный тег urltest-аутбаунда из подписки (может быть "best", "proxy" и т.д.)
+        val autoTag = serverOutbounds.filterIsInstance<Map<*, *>>()
+            .firstOrNull { (it["type"] as? String) == "urltest" }
+            ?.get("tag") as? String ?: "auto"
+
+        // Гарантируем наличие direct/block — минималистичные подписки их не включают
+        val existingTags = serverOutbounds.filterIsInstance<Map<*, *>>()
+            .mapNotNull { it["tag"] as? String }.toSet()
+        val outbounds = serverOutbounds.toMutableList<Any>()
+        if ("direct" !in existingTags) outbounds.add(mapOf("type" to "direct", "tag" to "direct"))
+        if ("block"  !in existingTags) outbounds.add(mapOf("type" to "block",  "tag" to "block"))
+
         val config = mapOf(
             "log" to mapOf("level" to "info", "timestamp" to true),
             "experimental" to mapOf(
                 "clash_api" to mapOf("external_controller" to "127.0.0.1:$CLASH_API_PORT")
             ),
             "inbounds" to listOf(buildMixedInbound()),
-            "outbounds" to serverOutbounds,
+            "outbounds" to outbounds,
             "route" to mapOf(
-                "rules" to buildRoutingRules("auto", userVpnSites, sniff),
+                "rules" to buildRoutingRules(autoTag, userVpnSites, sniff),
                 "final" to "direct"
             )
         )
@@ -122,8 +141,14 @@ object ConfigBuilder {
         return try {
             // Заменяем только route — outbounds не трогаем (без риска Double вместо Int)
             val config = JsonParser.parseString(storedJson).asJsonObject
+
+            // Читаем реальный тег urltest из сохранённого конфига
+            val autoTag = config.getAsJsonArray("outbounds")
+                ?.firstOrNull { it.isJsonObject && it.asJsonObject.get("type")?.asString == "urltest" }
+                ?.asJsonObject?.get("tag")?.asString ?: "auto"
+
             val routeObj = com.google.gson.JsonObject()
-            routeObj.add("rules", gson.toJsonTree(buildRoutingRules("auto", userVpnSites, sniff)))
+            routeObj.add("rules", gson.toJsonTree(buildRoutingRules(autoTag, userVpnSites, sniff)))
             routeObj.addProperty("final", "direct")
             config.add("route", routeObj)
 
