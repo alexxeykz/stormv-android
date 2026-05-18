@@ -129,7 +129,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectServer(server: ServerConfig) {
+        val shouldSwitch = _state.value.status == VpnStatus.CONNECTED &&
+                           _state.value.selectedServer?.id != server.id
         _state.value = _state.value.copy(selectedServer = server)
+        if (shouldSwitch) switchToServer(server)
+    }
+
+    private fun switchToServer(server: ServerConfig) {
+        pollJob?.cancel(); pollJob = null
+        healthJob?.cancel(); healthJob = null
+        viewModelScope.launch {
+            AppLogger.i("UI", "Переключение → ${server.displayName}")
+            getApplication<Application>().startService(
+                Intent(getApplication(), StormVpnService::class.java).apply {
+                    action = StormVpnService.ACTION_STOP
+                }
+            )
+            delay(1500)
+            startVpnService(server)
+        }
     }
 
     fun addServerFromUrl(url: String): Boolean {
