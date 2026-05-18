@@ -44,6 +44,7 @@ fun MainScreen(
     onRefreshSubscription: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
+    onClose: () -> Unit = {},
     onDownloadUpdate: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
 ) {
@@ -65,7 +66,7 @@ fun MainScreen(
         }
 
         // ── Логотип ──────────────────────────────────────────────────────────
-        LogoHeader(onOpenSettings = onOpenSettings, onOpenLogs = onOpenLogs)
+        LogoHeader(onOpenSettings = onOpenSettings, onOpenLogs = onOpenLogs, onClose = onClose)
 
         // ── Список серверов ──────────────────────────────────────────────────
         ServerListCard(
@@ -164,7 +165,7 @@ private fun UpdateBanner(
 // ── Logo ─────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun LogoHeader(onOpenSettings: () -> Unit = {}, onOpenLogs: () -> Unit = {}) {
+private fun LogoHeader(onOpenSettings: () -> Unit = {}, onOpenLogs: () -> Unit = {}, onClose: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -182,6 +183,13 @@ private fun LogoHeader(onOpenSettings: () -> Unit = {}, onOpenLogs: () -> Unit =
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = "Настройки",
+                    tint = SVTextSecondary
+                )
+            }
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Свернуть",
                     tint = SVTextSecondary
                 )
             }

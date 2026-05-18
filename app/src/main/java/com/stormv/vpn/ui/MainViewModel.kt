@@ -138,16 +138,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun switchToServer(server: ServerConfig) {
         pollJob?.cancel(); pollJob = null
         healthJob?.cancel(); healthJob = null
-        viewModelScope.launch {
-            AppLogger.i("UI", "Переключение → ${server.displayName}")
-            getApplication<Application>().startService(
-                Intent(getApplication(), StormVpnService::class.java).apply {
-                    action = StormVpnService.ACTION_STOP
-                }
-            )
-            delay(1500)
-            startVpnService(server)
-        }
+        // Отправляем новый START напрямую — StormVpnService сам отменяет предыдущий job
+        // и перезапускает sing-box. Не вызываем STOP+stopSelf() — иначе Android
+        // убирает приложение на фон (поведение при завершении foreground service).
+        AppLogger.i("UI", "Переключение → ${server.displayName}")
+        _state.value = _state.value.copy(status = VpnStatus.CONNECTING, errorMessage = null,
+            activeServerTag = null, telegramHealth = AppHealth.UNKNOWN, youtubeHealth = AppHealth.UNKNOWN)
+        startVpnService(server)
     }
 
     fun addServerFromUrl(url: String): Boolean {

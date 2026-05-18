@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
                         onRefreshSubscription = { vm.refreshSubscription() },
                         onOpenSettings = { showSettings = true },
                         onOpenLogs = { showLogs = true },
+                        onClose = { moveTaskToBack(true) },
                         onDownloadUpdate = { vm.downloadUpdate(this@MainActivity) },
                         onDismissUpdate = { vm.dismissUpdate() },
                     )
