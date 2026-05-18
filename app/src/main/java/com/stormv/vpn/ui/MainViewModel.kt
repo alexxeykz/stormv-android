@@ -33,6 +33,7 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URL
+import com.google.gson.JsonParser
 
 enum class VpnStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 enum class AppHealth { UNKNOWN, OK, DOWN }
@@ -78,7 +79,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 activeServerTag = if (!running) null else _state.value.activeServerTag
             )
             if (running) {
-                if (_state.value.selectedServer?.isSubscription == true) {
+                // Clash API polling только в Auto-режиме (urltest)
+                if (_state.value.selectedServer?.isAuto == true) {
                     startPollingActiveServer()
                 }
                 startHealthMonitoring()
@@ -100,19 +102,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadServers() {
         viewModelScope.launch {
             val all = ServerRepository.loadAll()
-            // isAuto servers are hidden from the UI list
-            val visible = all.filter { !it.isAuto }
+            // Auto server goes first, then subscription servers, then manual
+            val sorted = all.sortedWith(compareByDescending<ServerConfig> { it.isAuto }.thenBy { it.name })
             _state.value = _state.value.copy(
-                servers = visible,
-                selectedServer = visible.firstOrNull()
+                servers = sorted,
+                selectedServer = sorted.firstOrNull { it.isAuto } ?: sorted.firstOrNull()
             )
-            pingAll(visible)
+            pingAll(sorted)
         }
     }
 
     fun pingAll(servers: List<ServerConfig> = _state.value.servers) {
         viewModelScope.launch {
-            val pingable = servers.filter { !it.isAuto }
+            val pingable = servers.filter { !it.isAuto && it.host.isNotBlank() }
             _state.value = _state.value.copy(
                 pingResults = pingable.associate { it.id to "..." }
             )
@@ -199,7 +201,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun applySubscriptionServers(servers: List<com.stormv.vpn.model.ServerConfig>) {
         val autoServer = servers.firstOrNull { it.isAuto }
         val newSubTags = servers.filter { !it.isAuto }.map { it.displayName }.toSet()
-        // Оставляем только ручные серверы, которых нет в новой подписке (по имени)
         val manual = ServerRepository.loadAll()
             .filter { !it.isAuto && !it.isSubscription && it.displayName !in newSubTags }
         val newList = if (autoServer != null) {
@@ -208,26 +209,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             manual + servers
         }
         ServerRepository.saveAll(newList)
-        val visible = newList.filter { !it.isAuto }
+        val sorted = newList.sortedWith(compareByDescending<ServerConfig> { it.isAuto }.thenBy { it.name })
         _state.value = _state.value.copy(
-            servers = visible,
-            selectedServer = visible.firstOrNull { it.isSubscription }
-                ?: _state.value.selectedServer
-                ?: visible.firstOrNull()
+            servers = sorted,
+            // Сохраняем текущий выбор; при первом добавлении подписки — выбираем Auto
+            selectedServer = _state.value.selectedServer?.let { cur ->
+                sorted.firstOrNull { it.id == cur.id }
+            } ?: sorted.firstOrNull { it.isAuto } ?: sorted.firstOrNull()
         )
     }
 
     fun removeServer(server: ServerConfig) {
+        if (server.isAuto) return // Auto сервер нельзя удалить напрямую — управляется подпиской
         if (_state.value.status == VpnStatus.CONNECTED &&
             _state.value.selectedServer?.id == server.id) {
             disconnect()
         }
         ServerRepository.remove(server.id)
-        val updated = ServerRepository.loadAll().filter { !it.isAuto }
+        val updated = ServerRepository.loadAll()
+            .sortedWith(compareByDescending<ServerConfig> { it.isAuto }.thenBy { it.name })
         _state.value = _state.value.copy(
             servers = updated,
             selectedServer = if (_state.value.selectedServer?.id == server.id)
-                updated.firstOrNull() else _state.value.selectedServer
+                updated.firstOrNull { it.isAuto } ?: updated.firstOrNull()
+            else _state.value.selectedServer
         )
     }
 
@@ -255,19 +260,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun startVpnService(server: ServerConfig) {
-        // Subscription servers → use the hidden auto config (urltest)
-        val serverToUse = if (server.isSubscription) {
-            ServerRepository.loadAll().firstOrNull { it.isAuto } ?: server
-        } else {
-            server
+        val label = when {
+            server.isAuto -> "Auto [${server.serverCount} серв.]"
+            else -> server.displayName
         }
-        val label = if (serverToUse.isAuto) "Auto [${serverToUse.serverCount} серв.]"
-                    else serverToUse.displayName
         AppLogger.i("UI", "Подключение → $label")
         _state.value = _state.value.copy(status = VpnStatus.CONNECTING, errorMessage = null)
         val intent = Intent(getApplication(), StormVpnService::class.java).apply {
             action = StormVpnService.ACTION_START
-            putExtra(StormVpnService.EXTRA_SERVER, gson.toJson(serverToUse))
+            putExtra(StormVpnService.EXTRA_SERVER, gson.toJson(server))
         }
         getApplication<Application>().startForegroundService(intent)
     }
@@ -374,22 +375,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startPollingActiveServer() {
         pollJob?.cancel()
+        val autoServer = _state.value.selectedServer?.takeIf { it.isAuto } ?: return
+        val urlTestTag = extractUrlTestTag(autoServer.singboxConfig)
         pollJob = viewModelScope.launch {
-            delay(2000) // wait for sing-box to start
+            delay(2000)
             while (true) {
-                val tag = fetchActiveServerTag()
+                val tag = fetchActiveServerTag(urlTestTag)
                 if (tag != null && tag != _state.value.activeServerTag) {
                     _state.value = _state.value.copy(activeServerTag = tag)
-                    AppLogger.i("UI", "Активный сервер: $tag")
+                    AppLogger.i("UI", "Активный сервер (urltest): $tag")
                 }
                 delay(3000)
             }
         }
     }
 
-    private suspend fun fetchActiveServerTag(): String? = withContext(Dispatchers.IO) {
+    private fun extractUrlTestTag(singboxConfig: String): String = runCatching {
+        JsonParser.parseString(singboxConfig).asJsonObject
+            .getAsJsonArray("outbounds")
+            ?.firstOrNull { it.isJsonObject && it.asJsonObject.get("type")?.asString == "urltest" }
+            ?.asJsonObject?.get("tag")?.asString ?: "auto"
+    }.getOrDefault("auto")
+
+    private suspend fun fetchActiveServerTag(urlTestTag: String): String? = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL("http://127.0.0.1:${ConfigBuilder.CLASH_API_PORT}/proxies/auto")
+            val url = URL("http://127.0.0.1:${ConfigBuilder.CLASH_API_PORT}/proxies/$urlTestTag")
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 2000
             conn.readTimeout = 2000

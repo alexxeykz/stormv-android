@@ -456,17 +456,21 @@ private fun ServerItem(
             Spacer(modifier = Modifier.width(4.dp))
         }
 
-        // Удалить
-        IconButton(
-            onClick = onRemove,
-            modifier = Modifier.size(32.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = "Удалить",
-                tint = SVTextSecondary.copy(alpha = 0.6f),
-                modifier = Modifier.size(18.dp)
-            )
+        // Удалить (Auto сервер нельзя удалить напрямую)
+        if (!server.isAuto) {
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = "Удалить",
+                    tint = SVTextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.size(32.dp))
         }
     }
 }
