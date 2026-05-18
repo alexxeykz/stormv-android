@@ -10,9 +10,27 @@ object SingboxOutboundParser {
     fun parse(ob: Map<*, *>): ServerConfig? {
         val type = ob["type"] as? String ?: return null
         if (type in SKIP_TYPES) return null
+        val tag = ob["tag"] as? String ?: ""
+
+        // WireGuard: структура отличается — server/port внутри peers, нет tls/transport
+        if (type == "wireguard") {
+            val peer = (ob["peers"] as? List<*>)?.firstOrNull() as? Map<*, *>
+            val addrs = ob["local_address"] as? List<*>
+            return ServerConfig(
+                name = tag, protocol = Protocol.WIREGUARD,
+                host = peer?.get("server") as? String ?: "",
+                port = (peer?.get("server_port") as? Number)?.toInt() ?: 0,
+                privateKey = ob["private_key"] as? String ?: "",
+                publicKey = peer?.get("public_key") as? String ?: "",
+                presharedKey = peer?.get("pre_shared_key") as? String ?: "",
+                localAddress = (addrs?.firstOrNull() as? String) ?: "",
+                isSubscription = true
+            )
+        }
+
+        // Все остальные протоколы имеют server/server_port на верхнем уровне
         val host = ob["server"] as? String ?: return null
         val port = (ob["server_port"] as? Number)?.toInt() ?: return null
-        val tag = ob["tag"] as? String ?: ""
 
         val tls = ob["tls"] as? Map<*, *>
         val reality = tls?.get("reality") as? Map<*, *>
@@ -87,20 +105,6 @@ object SingboxOutboundParser {
                 sni = sni, skipCertVerify = skipCertVerify,
                 isSubscription = true
             )
-            "wireguard" -> {
-                val peer = (ob["peers"] as? List<*>)?.firstOrNull() as? Map<*, *>
-                val addrs = ob["local_address"] as? List<*>
-                ServerConfig(
-                    name = tag, protocol = Protocol.WIREGUARD,
-                    host = peer?.get("server") as? String ?: host,
-                    port = (peer?.get("server_port") as? Number)?.toInt() ?: port,
-                    privateKey = ob["private_key"] as? String ?: "",
-                    publicKey = peer?.get("public_key") as? String ?: "",
-                    presharedKey = peer?.get("pre_shared_key") as? String ?: "",
-                    localAddress = (addrs?.firstOrNull() as? String) ?: "",
-                    isSubscription = true
-                )
-            }
             else -> null
         }
     }
