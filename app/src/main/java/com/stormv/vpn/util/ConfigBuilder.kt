@@ -28,7 +28,7 @@ object ConfigBuilder {
         "tdesktop.com", "api.telegram.org", "core.telegram.org", "cdn.telegram.org"
     )
     private val TELEGRAM_IP_CIDRS = listOf(
-        "149.154.160.0/20",   // DC1–5 (основные)
+        "149.154.160.0/20",   // DC1–5 (основные, AS62041)
         "91.108.4.0/22",      // DC1, DC3
         "91.108.8.0/22",      // DC3, DC5
         "91.108.16.0/22",     // DC4
@@ -36,6 +36,8 @@ object ConfigBuilder {
         "91.108.36.0/23",     // DC дополнительный
         "91.108.38.0/23",     // DC дополнительный
         "91.108.56.0/22",     // DC3
+        "91.105.192.0/23",    // Telegram (AS44907) — видели в логах как direct!
+        "185.76.151.0/24",    // Telegram CDN (AS44907)
         "95.161.64.0/20"      // Telegram Media Server (медиа-файлы в РФ)
     )
 
