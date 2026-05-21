@@ -91,7 +91,10 @@ object ConfigBuilder {
         rules.add(mapOf("domain_suffix" to proxyDomains, "outbound" to proxyTag))
         // Telegram DC IP-соединения (MTPROTO без SNI) → VPN
         rules.add(mapOf("ip_cidr" to TELEGRAM_IP_CIDRS, "outbound" to proxyTag))
-        // YouTube Google IP-диапазоны → VPN (QUIC/UDP не снифается по домену)
+        // QUIC (UDP 443) для YouTube IP блокируем → YouTube сразу падает на TCP,
+        // иначе SOCKS5 UDP ненадёжен для больших потоков и YouTube ждёт таймаут ~30с
+        rules.add(mapOf("network" to "udp", "port" to 443, "ip_cidr" to YOUTUBE_IP_CIDRS, "outbound" to "block"))
+        // YouTube Google IP-диапазоны → VPN (TCP после блока QUIC выше)
         rules.add(mapOf("ip_cidr" to YOUTUBE_IP_CIDRS, "outbound" to proxyTag))
         // Локальные сети → напрямую
         rules.add(mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct"))
