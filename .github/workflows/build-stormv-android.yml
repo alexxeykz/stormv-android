@@ -63,7 +63,8 @@ jobs:
 
       - name: Download latest sing-box (arm64-v8a, x86_64)
         run: |
-          VERSION=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \
+          VERSION=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \
             | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
           echo "sing-box version: $VERSION"
           BASE="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}"
@@ -85,7 +86,8 @@ jobs:
 
       - name: Download tun2socks (arm64-v8a, x86_64)
         run: |
-          VERSION=$(curl -s "https://api.github.com/repos/xjasonlyu/tun2socks/releases/latest" \
+          VERSION=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/xjasonlyu/tun2socks/releases/latest" \
             | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
           echo "tun2socks version: $VERSION"
           BASE="https://github.com/xjasonlyu/tun2socks/releases/download/v${VERSION}"
