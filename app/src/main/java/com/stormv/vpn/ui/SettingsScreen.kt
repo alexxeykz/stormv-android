@@ -34,6 +34,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var vpnSitesText by remember {
         mutableStateOf(SettingsRepository.vpnSites.joinToString("\n"))
     }
+    var vpnAppsText by remember {
+        mutableStateOf(SettingsRepository.vpnApps.joinToString("\n"))
+    }
 
     Column(
         modifier = Modifier
@@ -64,6 +67,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 dnsSecondary = "8.8.4.4"
                 autoConnect = false
                 vpnSitesText = ""
+                vpnAppsText = ""
                 bypassText = "192.168.0.0/16\n10.0.0.0/8\n172.16.0.0/12"
             }) {
                 Icon(Icons.Filled.RestartAlt, contentDescription = "Сбросить", tint = SVTextSecondary)
@@ -167,6 +171,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 )
             }
 
+            // ── Приложения через VPN ──────────────────────────────────────────
+            SettingsCard(title = "Приложения через VPN") {
+                Text(
+                    "Package name приложений, которые должны идти через VPN.",
+                    fontSize = 12.sp,
+                    color = SVTextSecondary,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+                Text(
+                    "Один package name на строку. Пример: app.revanced.android.youtube",
+                    fontSize = 11.sp,
+                    color = SVTextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                OutlinedTextField(
+                    value = vpnAppsText,
+                    onValueChange = { vpnAppsText = it },
+                    colors = svTextFieldColors(),
+                    textStyle = LocalTextStyle.current.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp
+                    ),
+                    placeholder = {
+                        Text(
+                            "app.revanced.android.youtube\ncom.instagram.android",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = SVTextSecondary.copy(alpha = 0.3f)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
+            }
+
             // ── Bypass ────────────────────────────────────────────────────────
             SettingsCard(title = "Bypass — не через VPN") {
                 Text(
@@ -236,6 +276,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                         .removePrefix("http://")
                         .trimEnd('/')
                     }
+                    .filter { it.isNotBlank() }
+                SettingsRepository.vpnApps = vpnAppsText
+                    .split("\n")
+                    .map { it.trim() }
                     .filter { it.isNotBlank() }
                 SettingsRepository.bypassList = bypassText
                     .split("\n")

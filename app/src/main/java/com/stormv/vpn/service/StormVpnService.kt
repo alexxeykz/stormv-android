@@ -52,11 +52,13 @@ class StormVpnService : VpnService() {
             "com.google.android.youtube",
             "com.google.android.youtube.tv",
             "com.google.android.apps.youtube.music",
-            // YouTube ReVanced
+            // YouTube ReVanced (все известные package names)
             "app.revanced.android.youtube",
             "app.revanced.android.apps.youtube.music",
             "app.rvx.android.youtube",
             "app.rvx.android.apps.youtube.music",
+            "com.rvx.android.youtube",
+            "com.rvx.android.apps.youtube.music",
             // Браузеры
             "com.android.chrome",
             "org.mozilla.firefox",
@@ -165,7 +167,8 @@ class StormVpnService : VpnService() {
                     .setMtu(8500)
                     .setBlocking(false)
 
-                for (pkg in ROUTED_APPS) {
+                val appsToRoute = ROUTED_APPS + SettingsRepository.vpnApps
+                for (pkg in appsToRoute) {
                     try {
                         tun.addAllowedApplication(pkg)
                     } catch (e: Exception) {

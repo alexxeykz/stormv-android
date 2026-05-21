@@ -33,6 +33,12 @@ object SettingsRepository {
             .split("\n").map { it.trim() }.filter { it.isNotBlank() }
         set(v) { kv.encode("vpn_sites", v.joinToString("\n")) }
 
+    // Package names приложений, добавленных пользователем в split tunneling.
+    var vpnApps: List<String>
+        get() = (kv.decodeString("vpn_apps", "") ?: "")
+            .split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        set(v) { kv.encode("vpn_apps", v.joinToString("\n")) }
+
     var subscriptionUrl: String
         get() = kv.decodeString("subscription_url", "") ?: ""
         set(v) { kv.encode("subscription_url", v) }
