@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,9 @@ import androidx.compose.ui.unit.sp
 import com.stormv.vpn.BuildConfig
 import com.stormv.vpn.data.SettingsRepository
 import com.stormv.vpn.ui.theme.*
+import com.stormv.vpn.util.UpdateInfo
+import com.stormv.vpn.util.UpdateManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +41,12 @@ fun SettingsScreen(onBack: () -> Unit) {
     var vpnAppsText by remember {
         mutableStateOf(SettingsRepository.vpnApps.joinToString("\n"))
     }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var foundUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    var noUpdateFound by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(-1) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -257,6 +267,104 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = SVTextSecondary,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = SVTextSecondary.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(4.dp))
+                when {
+                    isCheckingUpdate -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = SVPurple
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Проверка обновлений...", fontSize = 13.sp, color = SVTextSecondary)
+                    }
+                    noUpdateFound -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Обновлений нет",
+                            fontSize = 13.sp,
+                            color = SVTextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { noUpdateFound = false },
+                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        ) {
+                            Text("ОК", color = SVPurpleLight, fontSize = 12.sp)
+                        }
+                    }
+                    foundUpdate != null -> {
+                        val info = foundUpdate!!
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (downloadProgress in 0..99) {
+                                Text(
+                                    "Скачивание $downloadProgress%",
+                                    fontSize = 13.sp,
+                                    color = SVTextSecondary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress / 100f },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = SVPurple,
+                                    trackColor = SVBgItem
+                                )
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        "Доступна ${info.versionName}",
+                                        fontSize = 13.sp,
+                                        color = SVTextPrimary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                UpdateManager.downloadAndInstall(context, info) { p ->
+                                                    downloadProgress = p
+                                                }
+                                                downloadProgress = -1
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Text(
+                                            "Обновить",
+                                            color = SVPurpleLight,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> TextButton(
+                        onClick = {
+                            isCheckingUpdate = true
+                            noUpdateFound = false
+                            foundUpdate = null
+                            coroutineScope.launch {
+                                val info = UpdateManager.checkForUpdate()
+                                isCheckingUpdate = false
+                                if (info != null) foundUpdate = info else noUpdateFound = true
+                            }
+                        },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Проверить обновления", color = SVPurpleLight, fontSize = 13.sp)
+                    }
                 }
             }
 
