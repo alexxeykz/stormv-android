@@ -98,6 +98,8 @@ object ConfigBuilder {
         rules.add(mapOf("ip_cidr" to YOUTUBE_IP_CIDRS, "outbound" to proxyTag))
         // Локальные сети → напрямую
         rules.add(mapOf("ip_cidr" to LOCAL_IP_CIDRS, "outbound" to "direct"))
+        // Весь IPv6 → VPN (прямой IPv6 через TUN недоступен, иначе "network is unreachable")
+        rules.add(mapOf("ip_version" to 6, "outbound" to proxyTag))
         return rules
     }
 
